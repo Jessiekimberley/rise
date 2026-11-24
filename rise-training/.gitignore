@@ -1,0 +1,11 @@
+node_modules/
+.pnpm-store/
+.next/
+.vercel/
+.neon
+.rise-local/
+.env*
+!.env.example
+*.tsbuildinfo
+next-env.d.ts
+.neon
