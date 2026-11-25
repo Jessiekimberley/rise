@@ -1,9 +1,9 @@
 'use client';
 
-import { ChartNoAxesCombined, Check, ChevronLeft, Play, Plus, StickyNote, Timer } from 'lucide-react';
+import { ChartNoAxesCombined, Check, ChevronLeft, Pencil, Play, Plus, Timer, Trash2 } from 'lucide-react';
 import { useEffect, useRef, useState, type ChangeEvent, type FormEvent, type KeyboardEvent, type PointerEvent as ReactPointerEvent, type ReactNode } from 'react';
 import { compactSet, displayDate, matchingSets, pastSessions, restDisplay } from '@/lib/insights';
-import { extraIndex, extraKindFor, extraKinds, extraLabel, type ExtraKind, type SetLog, type TrainingData } from '@/lib/model';
+import { extraIndex, extraKindFor, extraLabel, type ExtraKind, type SetLog, type TrainingData } from '@/lib/model';
 import { canonicalVariant, exerciseOptions, prescribedReps, type Exercise } from '@/lib/programme';
 import { PrimaryButton, RoundButton } from './ui';
 
@@ -141,7 +141,7 @@ function SwipeDelete({ enabled, label, onDelete, onSwiped, children, current, do
 
   return <div className="logger-swipe" role="listitem" data-open={offset < 0 || undefined}>
     {enabled && <button type="button" className="logger-swipe-delete" aria-label={label} tabIndex={offset < 0 ? 0 : -1}
-      onFocus={() => setOffset(-deleteWidth)} onClick={onDelete}>Delete</button>}
+      onFocus={() => setOffset(-deleteWidth)} onClick={onDelete}><Trash2 size={18} strokeWidth={1.8} aria-hidden="true" /></button>}
     <div className="logger-set" data-weighted={weighted} data-current={current} data-done={done} data-dragging={dragging || undefined}
       style={offset ? { transform: `translateX(${offset}px)` } : undefined}
       onPointerDown={pointerDown} onPointerMove={pointerMove} onPointerUp={pointerUp} onPointerCancel={pointerUp}>
@@ -169,6 +169,7 @@ export function LogSet({ rows, active, exerciseNumber, exerciseCount, workSetCou
   const [noteBusy, setNoteBusy] = useState(false);
   const [noteError, setNoteError] = useState('');
   const noteInput = useRef<HTMLTextAreaElement>(null);
+  const savingNote = useRef(false);
   const replaceWeight = useRef(new Set<string>());
   const weightFromTouch = useRef(false);
   const skipClick = useRef(false);
@@ -183,10 +184,6 @@ export function LogSet({ rows, active, exerciseNumber, exerciseCount, workSetCou
   const weighted = isWeighted(exercise);
   const countLabel = timed ? 'Seconds' : exercise.perSide ? `Reps per ${exercise.perSide}` : 'Reps';
   const name = extra ? extraLabel[extra] : `Set ${index + 1}`;
-  const shownExtras = new Set(rows.flatMap((row) => {
-    const rowKind = extraKindFor(row.index);
-    return rowKind ? [rowKind] : [];
-  }));
   const barbell = usesBarbell(exercise, variant);
   const history = panel === 'history';
   const plates = barbell && panel === 'plates';
@@ -289,16 +286,15 @@ export function LogSet({ rows, active, exerciseNumber, exerciseCount, workSetCou
     setNoteOpen(true);
   }
 
-  const noteAction = noteBusy ? 'Saving…' : noteDraft.trim() || !savedNote ? 'Save to log' : 'Remove from log';
-
   async function commitNote() {
-    if (locked) return;
+    if (locked || savingNote.current) return;
     const text = noteDraft.trim();
     if (text === savedNote) {
       setNoteOpen(false);
       setNoteError('');
       return;
     }
+    savingNote.current = true;
     setNoteBusy(true);
     setNoteError('');
     try {
@@ -306,7 +302,10 @@ export function LogSet({ rows, active, exerciseNumber, exerciseCount, workSetCou
       setNoteOpen(false);
     } catch (reason) {
       setNoteError(reason instanceof Error ? reason.message : 'Could not save. Try again.');
-    } finally { setNoteBusy(false); }
+    } finally {
+      savingNote.current = false;
+      setNoteBusy(false);
+    }
   }
 
   return <form className="screen screen-logger" aria-labelledby="log-heading" onSubmit={submit}>
@@ -350,8 +349,7 @@ export function LogSet({ rows, active, exerciseNumber, exerciseCount, workSetCou
           <span>{displayDate(entry.date, { weekday: 'short', day: 'numeric', month: 'short' })}{position === 0 ? ' · last session' : ''}</span>
           <strong>{sets.map(compactSet).join(' · ')}</strong>
         </div>) : <div role="listitem"><span>No past sets for this exercise yet.</span></div>}
-      </div> : <>
-        <div className="logger-sets" role="list" aria-label="Sets">
+      </div> : <div className="logger-sets" role="list" aria-label="Sets">
           {rows.map((row) => {
             const current = !finishing && row.index === index;
             const rowExtra = extraKindFor(row.index);
@@ -389,37 +387,26 @@ export function LogSet({ rows, active, exerciseNumber, exerciseCount, workSetCou
               </label>}
             </SwipeDelete>;
           })}
-        </div>
-        <div className="logger-add">
-          {workSetCount < 20 && <button type="button" className="logger-pill" aria-label="Add a set" onClick={() => void perform(() => add(), 'keep')} disabled={locked}>
-            <Plus size={16} strokeWidth={1.8} aria-hidden="true" />Set
-          </button>}
-          {extraKinds.filter((item) => !shownExtras.has(item)).map((item) => <button type="button" key={item} className="logger-pill"
-            aria-label={`Add ${extraLabel[item].toLowerCase()}`} onClick={() => void perform(() => add(item), 'keep')} disabled={locked}>
-            <Plus size={16} strokeWidth={1.8} aria-hidden="true" />{extraLabel[item]}
-          </button>)}
-          {(workSetCount > 1 || shownExtras.size > 0) && <p className="logger-add-hint">Swipe left to delete a set.</p>}
-        </div>
-      </>}
+        </div>}
+      <div className="logger-add">
+        {!history && workSetCount < 20 && <button type="button" className="logger-icon" aria-label="Add a set" onClick={() => void perform(() => add(), 'keep')} disabled={locked}>
+          <Plus size={18} strokeWidth={1.8} aria-hidden="true" />
+        </button>}
+        <button type="button" className="logger-icon logger-note-toggle" aria-label={savedNote ? 'Edit note' : 'Add a note'}
+          aria-pressed={noteOpen || Boolean(savedNote)} disabled={locked}
+          onPointerDown={(event) => event.preventDefault()}
+          onClick={() => { if (noteOpen) void commitNote(); else openNote(); }}>
+          <Pencil size={16} strokeWidth={1.8} aria-hidden="true" />
+        </button>
+      </div>
+      {noteOpen && <section className="logger-note" aria-label={`${exercise.name} note`}>
+        <textarea ref={noteInput} className="logger-note-input" rows={2} maxLength={2_000}
+          aria-label={`${exercise.name} note`} placeholder="Note"
+          value={noteDraft} onChange={(event) => setNoteDraft(event.target.value)} onBlur={() => void commitNote()} disabled={locked} />
+        {noteError && <p className="notice" role="alert">{noteError}</p>}
+      </section>}
     </div>
     <div className="logger-footer">
-      <section className="logger-note" aria-label={`${exercise.name} notes for Brenna`}>
-        {noteOpen ? <>
-          <textarea ref={noteInput} className="logger-note-input" rows={3} maxLength={2_000}
-            aria-label={`${exercise.name} notes for Brenna`} placeholder="Optional. This is saved with the exercise and sent in your log."
-            value={noteDraft} onChange={(event) => setNoteDraft(event.target.value)} disabled={locked} />
-          <div className="logger-note-actions">
-            <button type="button" className="logger-pill" onClick={() => void commitNote()} disabled={locked}>{noteAction}</button>
-            <button type="button" className="logger-note-cancel" onClick={() => { setNoteOpen(false); setNoteError(''); }} disabled={locked}>Cancel</button>
-          </div>
-        </> : savedNote ? <>
-          <p className="logger-note-saved">{savedNote}</p>
-          <button type="button" className="logger-note-open" onClick={openNote} disabled={locked}>Edit note</button>
-        </> : <button type="button" className="logger-note-open" onClick={openNote} disabled={locked}>
-          <StickyNote size={16} strokeWidth={1.8} aria-hidden="true" />Note for Brenna
-        </button>}
-        {noteError && <p className="notice" role="alert">{noteError}</p>}
-      </section>
       {error && <p className="notice" role="alert">{error}</p>}
       <div className="logger-status">
         <strong role="status">{finishing ? 'All working sets logged' : extra ? name : `${name} of ${workSetCount}`}</strong>

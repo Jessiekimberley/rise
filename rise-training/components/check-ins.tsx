@@ -1,9 +1,9 @@
 'use client';
 
-import { Check, ChevronLeft, ChevronRight } from 'lucide-react';
+import { ChevronLeft, ChevronRight } from 'lucide-react';
 import { useEffect, useId, useState } from 'react';
 import { addDays, blocksForDates, buildReport, datesThrough, dayHeading, displayDate, setWork, trainingWeekStart, type ReportDay, type ReportSet } from '@/lib/insights';
-import type { CheckIn, TrainingData, TrainingSnapshot } from '@/lib/model';
+import type { CheckIn, TrainingData } from '@/lib/model';
 import { docUrl, type DocTarget } from '@/lib/coach-doc';
 import { setsCsv } from '@/lib/workout-export';
 import { WeeklyCheckInLink } from './weekly-check-in';
@@ -135,34 +135,6 @@ function ExportSets({ data, week, onClose }: { data: TrainingData; week: string[
   </BottomSheet>;
 }
 
-function sentEntries(data: TrainingData) {
-  return Object.values(data.checkIns).filter((entry) => entry.publishedAt)
-    .sort((a, b) => (b.publishedAt ?? '').localeCompare(a.publishedAt ?? ''));
-}
-
-function CheckInSent({ entry, data, done, open }: { entry: CheckIn; data: TrainingData; done: () => void; open: (entry: CheckIn) => void }) {
-  const title = buildReport(data, entry.kind, entry.start, entry.end).title;
-  const previous = sentEntries(data).filter((item) => item.id !== entry.id);
-  return <section className="screen screen-sent">
-    <span className="sent-check" aria-hidden="true"><Check size={23} /></span>
-    <HeadingSentence className="heading-32" lead="Added to your coaching doc." follow="Appended to the end of the Google Doc. Nothing above it changed." />
-    <section className="doc-preview" aria-label="Appended check-in">
-      <div className="document-stub"><span></span><span></span><span>Earlier entries, untouched</span></div>
-      <Pill className="pill-new">New</Pill>
-      <h2>{title}</h2>
-      <p>{entry.text}</p>
-    </section>
-    {previous.length ? <section aria-label="Earlier check-ins">
-      <RowStack>{previous.map((item) => <Row key={item.id} label={displayDate(item.end)} value={item.kind === 'weekly' ? 'Weekly log' : 'Midweek log'}
-        onClick={() => open(item)} end={<ChevronRight size={18} />} />)}</RowStack>
-    </section> : <p className="fine">No earlier logs yet.</p>}
-    <div className="screen-actions">
-      <PrimaryButton onClick={done}>Done</PrimaryButton>
-      <PrimaryButton className="button-quiet" onClick={() => open(entry)}>Edit this log</PrimaryButton>
-    </div>
-  </section>;
-}
-
 function LogEditor({ entry, data, onBack, onDone, mutate }: {
   entry: CheckIn; data: TrainingData; onBack: () => void; onDone: () => void; mutate: Mutate;
 }) {
@@ -230,39 +202,25 @@ function LogEditor({ entry, data, onBack, onDone, mutate }: {
   </section>;
 }
 
-export function CheckIns({ date, data, mutate, publish, destination, docsReady, setFocused, done }: {
-  date: string; data: TrainingData; mutate: Mutate; publish: (id: string) => Promise<TrainingSnapshot>;
-  destination?: DocTarget; docsReady: boolean; setFocused: (focused: boolean) => void; done: () => void;
+export function CheckIns({ date, data, mutate, destination, setFocused }: {
+  date: string; data: TrainingData; mutate: Mutate;
+  destination?: DocTarget; setFocused: (focused: boolean) => void;
 }) {
-  const [receipt, setReceipt] = useState<CheckIn>();
   const [editingId, setEditingId] = useState<string>();
-  const [draft, setDraft] = useState<string | null>(null);
   const [exporting, setExporting] = useState(false);
-  const [busy, setBusy] = useState(false);
-  const [error, setError] = useState('');
   const start = trainingWeekStart(date, data.startedOn);
   const weekEnd = addDays(start, 6);
   const week = datesThrough(start, weekEnd);
   const end = date < weekEnd ? date : weekEnd;
   const report = buildReport(data, 'weekly', start, end);
-  const text = draft ?? report.text;
-  const canSend = docsReady && !!destination && !!text.trim();
   const history = Object.values(data.checkIns).sort((a, b) => b.end.localeCompare(a.end) || (b.publishedAt ?? '').localeCompare(a.publishedAt ?? ''));
   const editing = editingId ? data.checkIns[editingId] : undefined;
 
   useEffect(() => {
     if (!editingId || data.checkIns[editingId]) return;
     setEditingId(undefined);
-    setReceipt((current) => current?.id === editingId ? undefined : current);
     setFocused(false);
   }, [editingId, data.checkIns, setFocused]);
-
-  function viewReceipt(entry: CheckIn) {
-    setReceipt(entry);
-    setEditingId(undefined);
-    setFocused(true);
-    window.scrollTo(0, 0);
-  }
 
   function openLog(entry: CheckIn) {
     setEditingId(entry.id);
@@ -272,36 +230,17 @@ export function CheckIns({ date, data, mutate, publish, destination, docsReady, 
 
   function closeLog() {
     setEditingId(undefined);
-    if (!receipt) setFocused(false);
+    setFocused(false);
     window.scrollTo(0, 0);
   }
 
   function leaveEditor() {
     setEditingId(undefined);
-    setReceipt(undefined);
     setFocused(false);
     window.scrollTo(0, 0);
   }
 
-  async function send() {
-    if (busy || !canSend) return;
-    setBusy(true);
-    setError('');
-    const id = crypto.randomUUID();
-    try {
-      await mutate({ type: 'checkIn', data: { id, kind: 'weekly', start, end, text: text.trim() } });
-      const result = await publish(id);
-      const published = result.data.checkIns[id];
-      if (!published?.publishedAt) throw new Error('Google Docs has yet to confirm the append. Try again.');
-      setDraft(null);
-      viewReceipt(published);
-    } catch (reason) {
-      setError(reason instanceof Error ? reason.message : 'Could not send the log. Try again.');
-    } finally { setBusy(false); }
-  }
-
   if (editing) return <LogEditor key={editing.id} entry={editing} data={data} mutate={mutate} onBack={closeLog} onDone={leaveEditor} />;
-  if (receipt) return <CheckInSent entry={receipt} data={data} done={done} open={openLog} />;
 
   return <section className="screen screen-nav screen-check-in">
     <header className="check-in-heading">
@@ -313,23 +252,8 @@ export function CheckIns({ date, data, mutate, publish, destination, docsReady, 
       {report.days.length ? <div className="log-days">{report.days.map((day) => <LogDay key={`${day.date}:${day.order}`} day={day} />)}</div>
         : <p className="fine">No sets logged for this week yet.</p>}
     </section>
-    <details className="disclosure">
-      <summary>Edit the message</summary>
-      <section className="doc-preview">
-        <span className="fine">Change the text before you send it.</span>
-        <textarea className="log-message" value={text} maxLength={24_000} placeholder="No sets logged for this week yet." aria-label="Message for the coaching Doc" disabled={busy}
-          onChange={(event) => setDraft(event.target.value)} />
-        {draft !== null && draft !== report.text && <Pill onClick={() => setDraft(null)}>Use latest sets</Pill>}
-      </section>
-    </details>
-    {error && <p className="notice" role="alert">{error}</p>}
-    {!docsReady && <p className="fine">Google Docs isn’t connected yet. Your sets stay saved in the app.</p>}
-    {docsReady && !destination && <p className="fine">The coaching Doc isn’t connected yet. Your sets stay saved in the app.</p>}
     <div className="screen-actions">
-      <PrimaryButton onClick={() => void send()} disabled={busy || !canSend}>
-        {busy ? 'Sending…' : 'Send to coaching doc'}
-      </PrimaryButton>
-      <PrimaryButton className="button-quiet" onClick={() => setExporting(true)} disabled={busy}>Export</PrimaryButton>
+      <PrimaryButton onClick={() => setExporting(true)}>Export</PrimaryButton>
       <WeeklyCheckInLink />
     </div>
     {exporting && <ExportSets data={data} week={week} onClose={() => setExporting(false)} />}
@@ -337,7 +261,7 @@ export function CheckIns({ date, data, mutate, publish, destination, docsReady, 
       <summary>Previous logs</summary>
       {destination && <div className="check-in-extras"><Pill href={docUrl(destination)}>Open coaching Doc</Pill></div>}
       {history.length ? <RowStack>{history.map((entry) => <Row key={entry.id} label={`${displayDate(entry.end)} · ${entry.publishedAt ? 'Sent' : 'Saved'}`}
-        value="Training log" onClick={() => { if (!busy) openLog(entry); }} end={<ChevronRight size={18} />} />)}</RowStack>
+        value="Training log" onClick={() => openLog(entry)} end={<ChevronRight size={18} />} />)}</RowStack>
         : <p className="fine">No previous logs yet.</p>}
     </details>
   </section>;

@@ -155,8 +155,8 @@ export function TrainingApp({ initial, today: initialToday, configuredDoc, docsR
         onPlan={(id) => selectWorkout({ ...workout, planId: id, date: fixedWorkoutDate })}
         mutate={mutate} onBack={() => navigate('today')} onPreview={openWorkout} setFocused={setFocused} />}
       {tab === 'habits' && <Habits key={today} date={today} log={data.habits[today]} mutate={mutate} />}
-      {tab === 'check-ins' && <CheckIns key={today} date={today} data={data} mutate={mutate} docsReady={docsReady}
-        destination={data.docs?.checkIns ?? configuredDoc} publish={(id) => request('/api/check-in/publish', { id })} setFocused={setFocused} done={() => navigate('today')} />}
+      {tab === 'check-ins' && <CheckIns key={today} date={today} data={data} mutate={mutate}
+        destination={data.docs?.checkIns ?? configuredDoc} setFocused={setFocused} />}
     </main>
     {!focused && <FloatingNav tab={tab} onNavigate={(to) => {
       if (to === tab) { window.scrollTo(0, 0); return; }

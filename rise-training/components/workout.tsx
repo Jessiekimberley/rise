@@ -1,6 +1,6 @@
 'use client';
 
-import { Check, ChevronLeft, Clock3, Pause } from 'lucide-react';
+import { Check, ChevronLeft, Clock3, Play, Square } from 'lucide-react';
 import { useLayoutEffect, useRef, useState } from 'react';
 import { addDays, compactSet, displayDate, lastPerformance, ordinal, restDisplay, scheduledProgrammeDay, weekStart, workoutElapsedMs, workoutsThisWeek } from '@/lib/insights';
 import { effectiveSlot, extraIndex, extraKindFor, extraKinds, extraShown, firstOpenSet, sessionKey, workingSetCount, type ExtraKind, type Session, type SetLog, type TrainingData } from '@/lib/model';
@@ -104,8 +104,8 @@ function WorkoutClock({ session }: { session: Pick<Session, 'startedAt' | 'finis
   const stopped = Boolean(session.pausedAt);
   const label = session.finishedAt ? 'Total workout time' : stopped ? 'Workout clock stopped' : 'Elapsed workout time';
   return <span className={`workout-clock${stopped ? ' workout-clock-paused' : ''}`} role="timer" aria-label={label} aria-live="off">
-    {stopped ? <Pause size={14} aria-hidden="true" /> : <Clock3 size={16} aria-hidden="true" />}
-    {elapsed}{stopped && <span className="workout-clock-state">Paused</span>}
+    <Clock3 size={16} aria-hidden="true" />
+    {elapsed}
   </span>;
 }
 
@@ -148,7 +148,7 @@ export function Workout({ date, today, planId, onPlan, onOpen, onLogToday, data,
   const [rest, setRest] = useState<RestDetails>();
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
-  const [confirming, setConfirming] = useState<'discard' | 'reset' | 'resetWorkout'>();
+  const [confirming, setConfirming] = useState<'discard'>();
   const [showLogged, setShowLogged] = useState(false);
   const opened = useRef(false);
   if (session && !session.finishedAt) opened.current = true;
@@ -170,7 +170,7 @@ export function Workout({ date, today, planId, onPlan, onOpen, onLogToday, data,
     window.scrollTo(0, 0);
   }
 
-  function ask(action: 'discard' | 'reset' | 'resetWorkout') {
+  function ask(action: 'discard') {
     if (busy || !session || session.finishedAt) return;
     const leaving = action === 'discard' && selection !== undefined;
     if (leaving) {
@@ -218,35 +218,22 @@ export function Workout({ date, today, planId, onPlan, onOpen, onLogToday, data,
   const hasSets = slots.some(({ log }) => Object.keys(log.sets).length);
   const slot = selection && slots.find((item) => item.original.id === selection.slotId);
   const ready = Boolean(session && !session.finishedAt && !next);
-  const resetWorkoutText = hasSets
-    ? 'Reset this workout? The clock stops and every logged set is cleared.'
-    : 'Reset this workout? It goes back to not started, in case you opened it by mistake.';
-  const resetClockText = session?.pausedAt
-    ? 'Reset the clock to zero? It stays paused, and your sets stay.'
-    : 'Reset the clock to zero? It keeps running, and your sets stay.';
-  const clockConfirm = confirming === 'reset' || confirming === 'resetWorkout';
   const sessionBar = session && <div className="workout-session-bar">
     <div className="workout-session-heading">
       <div><strong>{selection ? dayTitle(plan) : session.finishedAt ? 'Workout finished' : ready ? 'Ready to submit' : 'Workout in progress'}</strong>
         <span>Day {plan.day} · <time dateTime={date}>{displayDate(date, dateWords)}</time></span></div>
-      <WorkoutClock key={session.startedAt} session={session} />
-    </div>
-    {!session.finishedAt && !confirming && <div className="workout-clock-options">
-      <Pill className="pill-dark" onClick={() => void setClock(Boolean(session.pausedAt))} disabled={busy}>{session.pausedAt ? 'Resume clock' : 'Stop clock'}</Pill>
-      <Pill onClick={() => ask('reset')} disabled={busy}>Reset clock</Pill>
-      <Pill onClick={() => ask('resetWorkout')} disabled={busy}>Reset workout</Pill>
-    </div>}
-    {clockConfirm && <div className="workout-confirm">
-      <p>{confirming === 'reset' ? resetClockText : resetWorkoutText}</p>
-      {error && <p className="notice" role="alert">{error}</p>}
-      <div className="workout-clock-options">
-        <Pill className="pill-dark" onClick={() => void (confirming === 'reset' ? resetClock() : resetWorkout())} disabled={busy}>
-          {busy ? 'Resetting…' : confirming === 'reset' ? 'Reset clock' : 'Reset workout'}
-        </Pill>
-        <Pill onClick={() => setConfirming(undefined)} disabled={busy}>{confirming === 'reset' ? 'Keep the time' : 'Keep workout'}</Pill>
+      <div className="workout-session-time">
+        <WorkoutClock key={session.startedAt} session={session} />
+        {!session.finishedAt && <button type="button" className="workout-stop" aria-pressed={Boolean(session.pausedAt)}
+          aria-label={session.pausedAt ? 'Resume clock' : 'Stop clock'} disabled={busy}
+          onClick={() => void setClock(Boolean(session.pausedAt))}>
+          {session.pausedAt
+            ? <Play size={14} strokeWidth={2} aria-hidden="true" />
+            : <Square size={11} fill="currentColor" strokeWidth={0} aria-hidden="true" />}
+        </button>}
       </div>
-    </div>}
-    {selection && !confirming && error && <p className="notice" role="alert">{error}</p>}
+    </div>
+    {selection && error && <p className="notice" role="alert">{error}</p>}
   </div>;
 
   async function begin() {
@@ -286,26 +273,6 @@ export function Workout({ date, today, planId, onPlan, onOpen, onLogToday, data,
     setError('');
     try { await mutate({ type: running ? 'resumeClock' : 'pauseClock', date, planId }); }
     catch (reason) { setError(errorMessage(reason)); } finally { setBusy(false); }
-  }
-
-  async function resetClock() {
-    if (busy) return;
-    setBusy(true);
-    setError('');
-    try {
-      await mutate({ type: 'resetClock', date, planId });
-      setConfirming(undefined);
-    } catch (reason) { setError(errorMessage(reason)); } finally { setBusy(false); }
-  }
-
-  async function resetWorkout() {
-    if (busy) return;
-    setBusy(true);
-    setError('');
-    try {
-      await mutate({ type: 'discard', date, planId });
-      go();
-    } catch (reason) { setError(errorMessage(reason)); } finally { setBusy(false); }
   }
 
   if (selection && slot) {
@@ -455,7 +422,7 @@ export function Workout({ date, today, planId, onPlan, onOpen, onLogToday, data,
             : upcoming ? <Pill className="pill-dark">Up next</Pill> : prior ? <Pill>Last {compactSet(prior)}</Pill> : undefined} />;
       })}
     </RowStack>
-    {error && !clockConfirm && <p className="notice" role="alert">{error}</p>}
+    {error && !confirming && <p className="notice" role="alert">{error}</p>}
     <div className="screen-actions">
       {prompt ? <>
         <p className="fine">{prompt.text}</p>

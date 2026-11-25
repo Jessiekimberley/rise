@@ -103,7 +103,7 @@ export function Today({ today, data, firstName, openWorkout, openCheckIn }: {
             const itemKind = dayKind(item.type);
             const name = displayDate(dayDate, { weekday: 'long' });
             const logged = Object.values(data.sessions).some((entry) => entry.date === dayDate && entry.finishedAt);
-            const mark = itemKind === 'cardio' ? 'Cardio' : itemKind === 'rest' ? 'Rest' : dayDate === today ? 'Today' : logged ? 'Done' : `D${item.day}`;
+            const mark = itemKind === 'cardio' ? 'Cardio' : itemKind === 'rest' ? 'Rest' : item.title.replace(/\s+body$/i, '');
             const role = itemKind === 'cardio' ? 'cardio day' : itemKind === 'rest' ? 'rest day' : `Day ${item.day}, ${item.title}`;
             return {
               value: dayDate, accessibleLabel: `${name} ${displayDate(dayDate)}, ${role}${dayDate === today ? ', today' : ''}${logged ? ', logged' : ''}`,
