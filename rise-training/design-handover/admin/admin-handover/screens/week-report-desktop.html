@@ -1,0 +1,208 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Week report for Brenna</title>
+<script src="./dc-lite.js"></script>
+<style>html,body{margin:0;background:#2b2b2d}</style>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Inter+Tight:wght@400;500;600&family=Newsreader:opsz,wght@6..72,400;6..72,500&display=swap" rel="stylesheet">
+<style>
+body{margin:0;font-family:'Inter Tight',system-ui,sans-serif;color:#1C1C1E}
+a{color:#1C1C1E;text-decoration:none}a:hover{color:#000000}
+button{font-family:inherit}
+</style>
+</helmet>
+<div style="width: 1440px; height: 1180px; position: relative; overflow: hidden; font-family: 'Inter Tight', system-ui, sans-serif; color: #1C1C1E; background: radial-gradient(60% 30% at 50% 18%, #F6CFB2 0%, rgba(246,207,178,0) 72%), linear-gradient(180deg, #C9D6E8 0%, #E1E7F0 20%, #F2F2F0 42%, #F2F2F0 100%)">
+  <div style="padding: 36px 40px 0; display: flex; flex-direction: column; gap: 18px">
+
+    <header style="display: flex; justify-content: space-between; align-items: flex-end; gap: 24px">
+      <div style="display: flex; flex-direction: column; gap: 14px">
+        <h1 style="margin: 0; font-family: 'Newsreader', Georgia, serif; font-size: 36px; line-height: 1.05; font-weight: 400; letter-spacing: -0.01em">Jessie's week. <span style="color: #6E6E73">Everything she logged, in one place.</span></h1>
+        <nav aria-label="Programme views" style="display: flex; gap: 4px; padding: 4px; border-radius: 24px; background: rgba(255,255,255,0.6); align-self: flex-start">
+          <span aria-current="page" style="height: 38px; padding: 0 18px; border-radius: 19px; display: flex; align-items: center; font-size: 14px; font-weight: 600; background: #1C1C1E; color: #FFFFFF">Week</span>
+          <a href="programme-editor-desktop.html" style="height: 38px; padding: 0 18px; border-radius: 19px; display: flex; align-items: center; font-size: 14px; font-weight: 600; color: #4A4A4F">Edit plan</a>
+          <span style="height: 38px; padding: 0 18px; border-radius: 19px; display: flex; align-items: center; font-size: 14px; font-weight: 600; color: #4A4A4F">History</span>
+          <span style="height: 38px; padding: 0 18px; border-radius: 19px; display: flex; align-items: center; font-size: 14px; font-weight: 600; color: #4A4A4F">Notes</span>
+        </nav>
+      </div>
+      <div style="display: flex; align-items: center; gap: 8px">
+        <button type="button" aria-label="Previous week" style="width: 44px; height: 44px; border-radius: 22px; border: none; background: #FFFFFF; cursor: pointer; display: flex; align-items: center; justify-content: center"><svg aria-hidden="true" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#1C1C1E" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M15 5l-7 7 7 7"/></svg></button>
+        <span style="height: 44px; padding: 0 18px; border-radius: 22px; background: #FFFFFF; display: flex; align-items: center; font-size: 15px; font-weight: 600">Mon 23 – Sun 29 Nov · this week</span>
+        <button type="button" aria-label="Next week" disabled style="width: 44px; height: 44px; border-radius: 22px; border: none; background: rgba(255,255,255,0.5); display: flex; align-items: center; justify-content: center"><svg aria-hidden="true" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#A9A7A2" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M9 5l7 7-7 7"/></svg></button>
+        <a href="programme-editor-desktop.html" style="height: 44px; padding: 0 20px; margin-left: 8px; border-radius: 22px; background: #1C1C1E; color: #FFFFFF; display: flex; align-items: center; font-size: 15px; font-weight: 600">Adjust the plan</a>
+      </div>
+    </header>
+
+    <section aria-label="Week summary" style="display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 12px">
+      <sc-for list="{{ stats }}" as="s" hint-placeholder-count="5">
+        <div style="padding: 14px 18px; border-radius: 20px; background: #FFFFFF; display: flex; flex-direction: column; gap: 4px">
+          <span style="font-size: 12px; color: #6E6E73">{{ s.label }}</span>
+          <span style="font-size: 26px; font-weight: 500; letter-spacing: -0.02em; font-variant-numeric: tabular-nums">{{ s.value }}<span style="font-size: 14px; font-weight: 400; color: #6E6E73">{{ s.unit }}</span></span>
+          <span style="font-size: 12px; color: #4A4A4F">{{ s.note }}</span>
+        </div>
+      </sc-for>
+    </section>
+
+    <div style="display: grid; grid-template-columns: minmax(0, 1fr) 420px; gap: 16px; align-items: start">
+
+      <section aria-label="Day by day" style="display: flex; flex-direction: column; gap: 6px">
+        <span style="font-size: 12px; font-weight: 600; letter-spacing: 0.06em; text-transform: uppercase; color: #6E6E73; margin: 0 6px 4px">Day by day · tap a day to open it</span>
+        <sc-for list="{{ days }}" as="d" hint-placeholder-count="7">
+          <article style="{{ d.cardStyle }}">
+            <button type="button" aria-expanded="{{ d.expandedAttr }}" onClick="{{ d.toggle }}" style="width: 100%; display: grid; grid-template-columns: 80px minmax(0, 1fr) auto 28px; gap: 14px; align-items: center; padding: 14px 18px; border: none; background: transparent; text-align: left; cursor: pointer; color: #1C1C1E">
+              <span style="display: flex; flex-direction: column; gap: 1px"><span style="font-size: 12px; color: #6E6E73">{{ d.dow }}</span><span style="font-size: 18px; font-weight: 600; font-variant-numeric: tabular-nums">{{ d.date }}</span></span>
+              <span style="display: flex; flex-direction: column; gap: 2px; min-width: 0">
+                <span style="font-size: 16px; font-weight: 600">{{ d.title }}</span>
+                <span style="font-size: 13px; color: #6E6E73; white-space: nowrap; overflow: hidden; text-overflow: ellipsis">{{ d.sub }}</span>
+              </span>
+              <span style="display: flex; gap: 6px">
+                <sc-for list="{{ d.chips }}" as="c" hint-placeholder-count="3"><span style="{{ c.style }}">{{ c.label }}</span></sc-for>
+              </span>
+              <span aria-hidden="true" style="{{ d.chevStyle }}"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M6 9l6 6 6-6"/></svg></span>
+            </button>
+            <sc-if value="{{ d.expanded }}" hint-placeholder-val="{{ false }}">
+              <div style="padding: 0 18px 18px 112px; display: grid; grid-template-columns: minmax(0, 1.4fr) minmax(0, 1fr); gap: 20px">
+                <div style="display: flex; flex-direction: column; gap: 4px">
+                  <span style="font-size: 12px; font-weight: 600; color: #6E6E73; margin-bottom: 4px">Sets logged · weight × reps (RIR)</span>
+                  <sc-for list="{{ d.lifts }}" as="l" hint-placeholder-count="4">
+                    <div style="display: grid; grid-template-columns: 170px minmax(0, 1fr); gap: 10px; padding: 8px 12px; border-radius: 12px; background: #F6F5F3; font-size: 13px">
+                      <span style="font-weight: 600">{{ l.name }}</span>
+                      <span style="color: #1C1C1E; font-variant-numeric: tabular-nums">{{ l.sets }}</span>
+                    </div>
+                  </sc-for>
+                </div>
+                <div style="display: flex; flex-direction: column; gap: 10px">
+                  <sc-for list="{{ d.notes }}" as="n" hint-placeholder-count="3">
+                    <div style="display: flex; flex-direction: column; gap: 3px">
+                      <span style="font-size: 12px; font-weight: 600; color: #6E6E73">{{ n.label }}</span>
+                      <span style="font-family: 'Newsreader', Georgia, serif; font-size: 16px; line-height: 1.35">{{ n.text }}</span>
+                    </div>
+                  </sc-for>
+                </div>
+              </div>
+            </sc-if>
+          </article>
+        </sc-for>
+      </section>
+
+      <aside style="display: flex; flex-direction: column; gap: 12px">
+        <section aria-label="Check-ins" style="padding: 18px 20px; border-radius: 24px; background: #FFFFFF; display: flex; flex-direction: column; gap: 12px">
+          <div style="display: flex; justify-content: space-between; align-items: baseline">
+            <span style="font-size: 12px; font-weight: 600; letter-spacing: 0.06em; text-transform: uppercase; color: #6E6E73">Check-ins</span>
+            <span style="font-size: 12px; color: #6E6E73">Midweek · Wed 25 Nov</span>
+          </div>
+          <div style="display: flex; flex-direction: column; gap: 3px"><span style="font-size: 12px; font-weight: 600; color: #6E6E73">Wins</span><span style="font-family: 'Newsreader', Georgia, serif; font-size: 17px; line-height: 1.35">Leg press up to 62.5 kg. Ate before every session.</span></div>
+          <div style="display: flex; flex-direction: column; gap: 3px"><span style="font-size: 12px; font-weight: 600; color: #6E6E73">What's been hard</span><span style="font-family: 'Newsreader', Georgia, serif; font-size: 17px; line-height: 1.35">Sleep was broken on Tuesday night.</span></div>
+          <div style="display: flex; flex-direction: column; gap: 6px; padding: 12px 14px; border-radius: 16px; background: #FBE7DA">
+            <span style="font-size: 12px; font-weight: 600; color: #5A4A40">Question for you</span>
+            <span style="font-family: 'Newsreader', Georgia, serif; font-size: 17px; line-height: 1.35">Can I add weight on squats next week?</span>
+          </div>
+          <span style="font-size: 12px; color: #6E6E73">Weekly check-in due Sunday</span>
+        </section>
+
+        <section aria-label="Main lifts versus last week" style="padding: 18px 20px; border-radius: 24px; background: #FFFFFF; display: flex; flex-direction: column; gap: 8px">
+          <span style="font-size: 12px; font-weight: 600; letter-spacing: 0.06em; text-transform: uppercase; color: #6E6E73; margin-bottom: 4px">Top sets vs last week</span>
+          <sc-for list="{{ lifts }}" as="l" hint-placeholder-count="4">
+            <div style="display: grid; grid-template-columns: minmax(0, 1fr) 90px 70px; gap: 8px; align-items: center; padding: 8px 0; border-top: 1px solid #F0EFEC; font-size: 14px">
+              <span style="font-weight: 500">{{ l.name }}</span>
+              <span style="font-variant-numeric: tabular-nums">{{ l.now }}</span>
+              <span style="{{ l.deltaStyle }}">{{ l.delta }}</span>
+            </div>
+          </sc-for>
+        </section>
+
+        <span style="font-size: 12px; color: #6E6E73; padding: 0 8px">Logged numbers here are sample data for the mockup.</span>
+      </aside>
+    </div>
+  </div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":1440,"height":1180}}'>
+class Component extends DCLogic {
+  constructor(props) {
+    super(props);
+    this.state = { open: 'Mon' };
+  }
+  renderVals() {
+    var self = this;
+    var s = this.state;
+    function chip(label, tone) {
+      var base = 'height: 26px; padding: 0 10px; border-radius: 13px; display: inline-flex; align-items: center; font-size: 12px; font-weight: 600; white-space: nowrap;';
+      return { label: label, style: base + (tone === 'good' ? 'background: #F6CFB2; color: #1C1C1E;' : tone === 'quiet' ? 'background: #F1F1EF; color: #6E6E73;' : 'background: #F1F1EF; color: #1C1C1E;') };
+    }
+    var raw = [
+      { dow: 'Mon', date: '23', title: 'Workout 1 · Lower body', sub: 'Done · 5 exercises · 16 sets', state: 'done',
+        chips: [chip('9,120 steps', 'good'), chip('Water ✓', 'good'), chip('7.5 h sleep', 'good')],
+        lifts: [
+          { name: 'Leg Press', sets: '60 × 8 (2) · 60 × 8 (2) · 62.5 × 7 (1) · 62.5 × 7 (1)' },
+          { name: 'RDL · Barbell', sets: '40 × 10 (2) · 40 × 10 (2) · 40 × 9 (1)' },
+          { name: 'Leg extensions', sets: '25 × 12 (2) · 25 × 12 (1) · 25 × 11 (1)' },
+          { name: 'Walking lunges', sets: '2 × 8 kg × 10/leg, all 3 sets' },
+          { name: 'Forearm plank', sets: '45 s · 45 s · 40 s' }
+        ],
+        notes: [
+          { label: 'Workout note', text: 'Leg press felt strong, last two sets were a grind.' },
+          { label: 'Sleep note', text: 'Slept straight through.' },
+          { label: 'Fuelling note', text: 'Oats and eggs before training, big rice bowl after.' }
+        ] },
+      { dow: 'Tue', date: '24', title: 'Workout 2 · Upper body', sub: 'Done · 5 exercises · 16 sets', state: 'done',
+        chips: [chip('8,050 steps', 'good'), chip('Water ✗', 'plain'), chip('6 h sleep', 'plain')],
+        lifts: [
+          { name: 'Lat Pulldown', sets: '37.5 × 8 (2) · 37.5 × 8 (1) · 35 × 8 (2) · 35 × 8 (1)' },
+          { name: 'Seated cable row', sets: '30 × 12 (2) · 30 × 11 (1) · 30 × 10 (1)' },
+          { name: 'Hammer curl', sets: '8 × 10 · 8 × 10 · 8 × 9' },
+          { name: 'Tricep pushdown', sets: '15 × 10 · 15 × 10 · 15 × 10' },
+          { name: 'Lateral raises', sets: '4 × 15 · 4 × 14 · 4 × 12' }
+        ],
+        notes: [
+          { label: 'Sleep note', text: 'Woke at 3am and couldn’t get back to sleep.' },
+          { label: 'Fuelling note', text: 'Skipped the pre-workout snack, felt flat.' }
+        ] },
+      { dow: 'Wed', date: '25', title: 'Workout 6 · Cardio', sub: 'Done · swapped forward from Saturday', state: 'done',
+        chips: [chip('11,400 steps', 'good'), chip('Water ✓', 'good'), chip('7 h sleep', 'good')],
+        lifts: [{ name: 'Cardio', sets: '50 min coastal walk' }],
+        notes: [{ label: 'Workout note', text: 'Nice day so I did cardio early.' }] },
+      { dow: 'Thu', date: '26', title: 'Workout 4 · Lower body', sub: 'Today · in progress · 2 of 16 sets', state: 'today',
+        chips: [chip('In progress', 'plain')],
+        lifts: [{ name: 'Back squat · Barbell', sets: '20 × 8 (warm-up) · 42.5 × 8 (2)' }],
+        notes: [] },
+      { dow: 'Fri', date: '27', title: 'Nothing logged yet', sub: 'Left this week: Workouts 3, 5 and 7', state: 'future', chips: [], lifts: [], notes: [] },
+      { dow: 'Sat', date: '28', title: 'Nothing logged yet', sub: '', state: 'future', chips: [], lifts: [], notes: [] },
+      { dow: 'Sun', date: '29', title: 'Nothing logged yet', sub: 'Weekly check-in due', state: 'future', chips: [], lifts: [], notes: [] }
+    ];
+    var days = raw.map(function (d) {
+      var open = s.open === d.dow && d.state !== 'future';
+      return {
+        dow: d.dow, date: d.date, title: d.title, sub: d.sub, chips: d.chips, lifts: d.lifts, notes: d.notes,
+        expanded: open, expandedAttr: open ? 'true' : 'false',
+        cardStyle: 'border-radius: 22px; overflow: hidden; ' + (d.state === 'future' ? 'background: rgba(255,255,255,0.45); color: #6E6E73;' : d.state === 'today' ? 'background: #FFFFFF; box-shadow: inset 0 0 0 1.5px #1C1C1E;' : 'background: #FFFFFF;'),
+        chevStyle: 'display: flex; justify-content: center; color: ' + (d.state === 'future' ? 'transparent' : '#4A4A4F') + '; transform: rotate(' + (open ? '180deg' : '0deg') + ');',
+        toggle: function () { if (d.state !== 'future') self.setState({ open: open ? null : d.dow }); }
+      };
+    });
+    var stats = [
+      { label: 'Workouts', value: '3', unit: ' of 7', note: '+ Workout 4 in progress' },
+      { label: 'Avg steps', value: '9,523', unit: '', note: 'Goal 8,000–10,000' },
+      { label: 'Water target hit', value: '2', unit: ' of 3 days', note: 'Goal 3–4 L' },
+      { label: 'Avg sleep', value: '6.8', unit: ' h', note: 'Goal 7–8 h · 1 broken night' },
+      { label: 'Notes', value: '6', unit: '', note: 'Workout, sleep and fuelling' }
+    ];
+    var lifts = [
+      { name: 'Leg Press', now: '62.5 × 7', delta: '+2.5 kg', up: true },
+      { name: 'RDL', now: '40 × 10', delta: 'same', up: false },
+      { name: 'Lat Pulldown', now: '37.5 × 8', delta: '+2.5 kg', up: true },
+      { name: 'Back squat', now: '42.5 × 8', delta: '+2.5 kg', up: true }
+    ].map(function (l) {
+      return { name: l.name, now: l.now, delta: l.delta, deltaStyle: 'justify-self: end; height: 24px; padding: 0 9px; border-radius: 12px; display: inline-flex; align-items: center; font-size: 12px; font-weight: 600; ' + (l.up ? 'background: #F6CFB2; color: #1C1C1E;' : 'background: #F1F1EF; color: #4A4A4F;') };
+    });
+    return { days: days, stats: stats, lifts: lifts };
+  }
+}
+</script>
+</body>
+</html>

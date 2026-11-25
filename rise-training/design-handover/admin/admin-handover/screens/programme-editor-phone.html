@@ -1,0 +1,114 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Programme editor on phone</title>
+<script src="./dc-lite.js"></script>
+<style>html,body{margin:0;background:#2b2b2d}</style>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Inter+Tight:wght@400;500;600&family=Newsreader:opsz,wght@6..72,400;6..72,500&display=swap" rel="stylesheet">
+<style>
+body{margin:0;font-family:'Inter Tight',system-ui,sans-serif;color:#1C1C1E}
+a{color:#1C1C1E;text-decoration:none}a:hover{color:#000000}
+button,input,textarea,select{font-family:inherit}
+input::placeholder,textarea::placeholder{color:#8A8A8E}
+</style>
+</helmet>
+<div style="width: 390px; height: 844px; position: relative; overflow: hidden; font-family: 'Inter Tight', system-ui, sans-serif; color: #1C1C1E; background: radial-gradient(95% 26% at 50% 18%, #F6CFB2 0%, rgba(246,207,178,0) 72%), linear-gradient(180deg, #C9D6E8 0%, #E1E7F0 22%, #F2F2F0 46%, #F2F2F0 100%)">
+  <div aria-hidden="true" style="padding: 56px 20px 0; display: flex; flex-direction: column; gap: 10px">
+    <span style="font-size: 13px; color: #4A4A4F">Edit plan · Workout 1</span>
+    <span style="font-family: 'Newsreader', Georgia, serif; font-size: 30px">Lower body.</span>
+  </div>
+  <span aria-hidden="true" style="position: absolute; inset: 0; background: rgba(28,28,30,0.28)"></span>
+
+  <section role="dialog" aria-label="Edit Leg Press" style="position: absolute; left: 0; right: 0; top: 118px; bottom: 0; border-radius: 32px 32px 0 0; background: #FFFFFF; display: flex; flex-direction: column">
+    <div style="padding: 10px 20px 0; display: flex; flex-direction: column; gap: 12px">
+      <span aria-hidden="true" style="align-self: center; width: 40px; height: 5px; border-radius: 3px; background: #E2E1DD"></span>
+      <div style="display: flex; justify-content: space-between; align-items: flex-start">
+        <span style="display: flex; flex-direction: column; gap: 2px">
+          <span style="font-size: 12px; color: #6E6E73">Exercise 1 of 5</span>
+          <input type="text" value="Leg Press" aria-label="Exercise name" style="border: none; padding: 0; background: transparent; font-family: 'Newsreader', Georgia, serif; font-size: 28px; color: #1C1C1E; width: 260px; outline: none">
+        </span>
+        <button type="button" aria-label="Exercise options: replace, duplicate, remove" style="width: 40px; height: 40px; border-radius: 20px; border: none; background: #F1F1EF; font-size: 18px; font-weight: 700; cursor: pointer">⋯</button>
+      </div>
+      <div role="radiogroup" aria-label="Logged as" style="display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 4px; padding: 4px; border-radius: 22px; background: #F1F1EF">
+        <sc-for list="{{ kinds }}" as="k" hint-placeholder-count="3">
+          <button type="button" role="radio" aria-checked="{{ k.checked }}" onClick="{{ k.pick }}" style="{{ k.style }}">{{ k.label }}</button>
+        </sc-for>
+      </div>
+    </div>
+
+    <div style="flex: 1; overflow: hidden; padding: 12px 20px 0; display: flex; flex-direction: column; gap: 6px">
+      <sc-for list="{{ sections }}" as="sec" hint-placeholder-count="4">
+        <div style="flex: none; border-radius: 20px; background: #F6F5F3; overflow: hidden">
+          <button type="button" aria-expanded="{{ sec.expandedAttr }}" onClick="{{ sec.toggle }}" style="width: 100%; display: flex; justify-content: space-between; align-items: center; gap: 10px; padding: 14px 16px; border: none; background: transparent; text-align: left; cursor: pointer; color: #1C1C1E">
+            <span style="display: flex; flex-direction: column; gap: 2px">
+              <span style="font-size: 15px; font-weight: 600">{{ sec.title }}</span>
+              <span style="font-size: 13px; color: #6E6E73">{{ sec.summary }}</span>
+            </span>
+            <span aria-hidden="true" style="{{ sec.chev }}"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M6 9l6 6 6-6"/></svg></span>
+          </button>
+          <sc-if value="{{ sec.isPrescription }}" hint-placeholder-val="{{ false }}">
+            <div style="padding: 0 12px 12px; display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 6px">
+              <label style="display: flex; flex-direction: column; gap: 2px; padding: 8px 12px; border-radius: 14px; background: #FFFFFF"><span style="font-size: 11px; color: #6E6E73">Working sets</span><input type="text" inputmode="numeric" value="4" style="border: none; padding: 0; background: transparent; font-size: 18px; font-weight: 500; color: #1C1C1E; outline: none; width: 100%"></label>
+              <div style="display: flex; flex-direction: column; gap: 2px; padding: 8px 12px; border-radius: 14px; background: #FFFFFF"><span style="font-size: 11px; color: #6E6E73">Reps (range)</span><span style="display: flex; gap: 6px; align-items: center"><input type="text" inputmode="numeric" value="8" aria-label="Reps from" style="width: 28px; border: none; padding: 0; background: transparent; font-size: 18px; font-weight: 500; color: #1C1C1E; outline: none"><span style="color: #6E6E73">–</span><input type="text" inputmode="numeric" value="8" aria-label="Reps to" style="width: 28px; border: none; padding: 0; background: transparent; font-size: 18px; font-weight: 500; color: #1C1C1E; outline: none"></span></div>
+              <label style="display: flex; flex-direction: column; gap: 2px; padding: 8px 12px; border-radius: 14px; background: #FFFFFF"><span style="font-size: 11px; color: #6E6E73">Rest</span><input type="text" value="2:00" style="border: none; padding: 0; background: transparent; font-size: 18px; font-weight: 500; color: #1C1C1E; outline: none; width: 100%"></label>
+              <label style="display: flex; flex-direction: column; gap: 2px; padding: 8px 12px; border-radius: 14px; background: #FFFFFF"><span style="font-size: 11px; color: #6E6E73">Target weight, kg</span><input type="text" inputmode="decimal" placeholder="Not set" style="border: none; padding: 0; background: transparent; font-size: 18px; font-weight: 500; color: #1C1C1E; outline: none; width: 100%"></label>
+              <button type="button" style="grid-column: span 2; height: 40px; border-radius: 14px; border: none; background: transparent; color: #1C1C1E; font-size: 13px; font-weight: 600; text-align: left; padding: 0 12px; cursor: pointer">More: warm-up sets, sides, rest note ›</button>
+            </div>
+          </sc-if>
+        </div>
+      </sc-for>
+    </div>
+
+    <div style="padding: 12px 20px 30px; display: flex; flex-direction: column; gap: 10px; background: #FFFFFF; box-shadow: 0 -8px 24px rgba(28,28,30,0.05)">
+      <div style="display: flex; align-items: center; gap: 10px; padding: 10px 14px; border-radius: 16px; background: #FBE7DA; font-size: 13px">
+        <span style="font-weight: 600; color: #5A4A40">Jessie sees</span>
+        <span>Leg Press · <strong style="font-weight: 600">4 × 8 · rest 2:00</strong></span>
+      </div>
+      <div style="display: flex; gap: 8px">
+        <button type="button" style="flex: 1; height: 56px; border-radius: 28px; border: none; background: #F1F1EF; color: #1C1C1E; font-size: 16px; font-weight: 600; cursor: pointer">Discard</button>
+        <button type="button" style="flex: 2; height: 56px; border-radius: 28px; border: none; background: #1C1C1E; color: #FFFFFF; font-size: 16px; font-weight: 600; cursor: pointer">Save · applies 26 Nov</button>
+      </div>
+    </div>
+  </section>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":390,"height":844}}'>
+class Component extends DCLogic {
+  constructor(props) {
+    super(props);
+    this.state = { kind: 'Reps', open: 'Prescription' };
+  }
+  renderVals() {
+    var self = this;
+    var s = this.state;
+    var seg = 'height: 36px; border-radius: 18px; border: none; font-size: 14px; font-weight: 600; cursor: pointer;';
+    var kinds = ['Reps', 'Bodyweight', 'Time'].map(function (v) {
+      var on = s.kind === v;
+      return { label: v, checked: on ? 'true' : 'false', style: seg + (on ? 'background: #FFFFFF; color: #1C1C1E; box-shadow: 0 1px 3px rgba(28,28,30,0.1);' : 'background: transparent; color: #4A4A4F;'), pick: function () { self.setState({ kind: v }); } };
+    });
+    var sections = [
+      ['Prescription', '4 × 8 · rest 2:00 · no target weight'],
+      ['Effort target', 'None · Jessie logs RIR each set'],
+      ['Swap options', 'None · Swap hidden for Jessie'],
+      ['Coaching', 'Cue set · no note or progression']
+    ].map(function (x) {
+      var open = s.open === x[0];
+      return {
+        title: x[0], summary: x[1], isPrescription: open && x[0] === 'Prescription',
+        expandedAttr: open ? 'true' : 'false',
+        chev: 'display: flex; color: #4A4A4F; transform: rotate(' + (open ? '180deg' : '0deg') + ');',
+        toggle: function () { self.setState({ open: open ? null : x[0] }); }
+      };
+    });
+    return { kinds: kinds, sections: sections };
+  }
+}
+</script>
+</body>
+</html>

@@ -1,14 +1,14 @@
 'use client';
 
 import Image from 'next/image';
-import { MessageSquare } from 'lucide-react';
-import { useId, useState, type KeyboardEvent } from 'react';
+import { ChevronLeft, MessageSquare } from 'lucide-react';
+import { useId, useState } from 'react';
 import { displayDate, workoutsDoneThisWeek } from '@/lib/insights';
-import { dayKind, programmeDays } from '@/lib/programme';
-import { revisionCovering, type ProgrammeSnapshot } from '@/lib/prescription';
+import { dayKind } from '@/lib/programme';
+import { contentBefore, type ProgrammeDay, type ProgrammeSnapshot } from '@/lib/prescription';
 import type { TrainingData } from '@/lib/model';
 import { weekPlans } from '@/lib/weeks';
-import { BottomSheet, HeadingSentence, PrimaryButton, RoundButton } from './ui';
+import { BottomSheet, HeadingSentence, PrimaryButton, RoundButton, Row, RowStack } from './ui';
 import type { Mutate } from './training-app';
 
 const workoutPhoto: Record<number, string> = {
@@ -25,10 +25,9 @@ function homeDate(today: string) {
   return displayDate(today, { weekday: 'long', day: 'numeric', month: 'long' }).replace(/,/g, '');
 }
 
-function startLabel(number: number, type: string, title: string) {
-  const kind = dayKind(type);
-  const detail = kind === 'cardio' ? 'cardio' : kind === 'rest' ? 'active rest' : title.toLowerCase();
-  return `Start Workout ${number} · ${detail}`;
+function dayLines(day: ProgrammeDay) {
+  if (day.exercises.length) return day.exercises.map((exercise) => exercise.name);
+  return dayKind(day.type) === 'cardio' ? day.options ?? [] : day.guidance ?? [];
 }
 
 export function Today({ today, data, programme, initials, openWorkout, openCheckIn, openHabits, mutate }: {
@@ -36,58 +35,67 @@ export function Today({ today, data, programme, initials, openWorkout, openCheck
   openWorkout: (id: string, date: string) => void; openCheckIn: () => void; openHabits: () => void; mutate: Mutate;
 }) {
   const progress = workoutsDoneThisWeek(data, today);
-  const [selected, setSelected] = useState<number | null>(progress.upNext);
-  const [confirming, setConfirming] = useState<number | null>(null);
+  const [viewing, setViewing] = useState<number | null>(null);
+  const [confirming, setConfirming] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
-  const group = useId();
   const titleId = useId();
-  const live = revisionCovering(programme.state, today)?.days;
-  const days = programmeDays.map((day) => {
-    const current = live?.find((item) => item.day === day.day);
-    return { day: day.day, type: current?.type ?? day.type, title: current?.title || day.title };
-  }).sort((a, b) => a.day - b.day);
-  const current = days.find((day) => day.day === selected);
+  const days = contentBefore(programme.state, today).days.slice().sort((a, b) => a.day - b.day);
+  const activity = days.find((day) => day.day === viewing && dayKind(day.type) !== 'strength');
 
-  function choose(number: number) {
-    const done = progress.done.has(number);
-    if (done && selected !== number) setConfirming(number);
-    else { setSelected(number); setConfirming(null); }
-  }
-
-  function onKey(event: KeyboardEvent<HTMLDivElement>) {
-    const delta = event.key === 'ArrowRight' || event.key === 'ArrowDown' ? 1
-      : event.key === 'ArrowLeft' || event.key === 'ArrowUp' ? -1 : 0;
-    if (!delta) return;
-    event.preventDefault();
-    const numbers = days.map((day) => day.day);
-    const index = Math.max(0, numbers.indexOf(selected ?? progress.upNext ?? numbers[0]));
-    const next = numbers[(index + delta + numbers.length) % numbers.length];
-    choose(next);
-    if (!progress.done.has(next) || next === selected) requestAnimationFrame(() => document.getElementById(`${group}-${next}`)?.focus());
-  }
-
-  async function start(day: (typeof days)[number]) {
-    if (busy) return;
+  function open(day: ProgrammeDay) {
     setError('');
+    setConfirming(false);
     if (dayKind(day.type) === 'strength') {
       const plan = weekPlans(data, today, undefined, programme).find((item) => item.day === day.day);
       if (!plan) { setError('This workout is not in the programme.'); return; }
       openWorkout(plan.id, today);
       return;
     }
+    setViewing(day.day);
+  }
+
+  async function start(day: ProgrammeDay, again = false) {
+    if (busy) return;
+    setError('');
+    if (!again && progress.done.has(day.day)) { setConfirming(true); return; }
+    setConfirming(false);
     setBusy(true);
     try {
-      const saved = await mutate({ type: 'logWorkout', workoutNumber: day.day });
-      setSelected(workoutsDoneThisWeek(saved.data, today).upNext);
+      await mutate({ type: 'logWorkout', workoutNumber: day.day });
+      setViewing(null);
       openHabits();
     } catch (reason) {
       setError(reason instanceof Error ? reason.message : 'Could not save. Try again.');
     } finally { setBusy(false); }
   }
 
-  const confirmed = confirming == null ? undefined : days.find((day) => day.day === confirming);
-  const confirmedDone = confirmed ? progress.done.get(confirmed.day) : undefined;
+  if (activity) {
+    const done = progress.done.get(activity.day);
+    const kind = dayKind(activity.type);
+    const lines = dayLines(activity);
+    const kindLabel = kind === 'cardio' ? 'Cardio' : 'Active rest';
+    return <section className="screen screen-nav screen-overview">
+      <div className="screen-toolbar">
+        <RoundButton aria-label="Back to Today" onClick={() => { setViewing(null); setConfirming(false); setError(''); }}><ChevronLeft size={20} /></RoundButton>
+      </div>
+      <HeadingSentence lead={`${activity.title}.`} follow={activity.note} />
+      <p className="overview-progress" role="status">{done ? `Done ${done.weekday} · Day ${activity.day}` : `Day ${activity.day} · ${kindLabel}`}</p>
+      {lines.length ? <RowStack>
+        {lines.map((line, index) => <Row key={`${index}-${line}`} label={kind === 'cardio' ? 'Option' : 'Today'} value={line} />)}
+      </RowStack> : <p className="fine">Nothing listed for this day yet.</p>}
+      {error && <p className="notice" role="alert">{error}</p>}
+      <div className="screen-actions">
+        <PrimaryButton disabled={busy} onClick={() => void start(activity)}>{busy ? 'Saving…' : 'Start workout'}</PrimaryButton>
+      </div>
+      {confirming && done && <BottomSheet className="again-sheet" labelId={titleId} onClose={() => setConfirming(false)}>
+        <HeadingSentence id={titleId} className="heading-small" lead={`Do Workout ${activity.day} again?`} follow={`You did ${activity.title.toLowerCase()} on ${done.weekdayLong}.`} />
+        <p className="again-note">It'll be logged as an extra session. Your week still counts it once.</p>
+        <PrimaryButton onClick={() => void start(activity, true)}>Do again</PrimaryButton>
+        <PrimaryButton className="button-muted" onClick={() => setConfirming(false)}>Pick another</PrimaryButton>
+      </BottomSheet>}
+    </section>;
+  }
 
   return <section className="screen screen-nav screen-home">
     <div className="home-bar">
@@ -96,16 +104,14 @@ export function Today({ today, data, programme, initials, openWorkout, openCheck
       <RoundButton aria-label="Check-in" onClick={openCheckIn}><MessageSquare size={20} /></RoundButton>
     </div>
     <HeadingSentence className="heading-small home-heading" lead="Pick today's." follow="Any order." />
-    <div className="workout-grid" role="radiogroup" aria-label="Choose today's workout" onKeyDown={onKey}>
+    <div className="workout-grid" aria-label="Workouts this week">
       {days.map((day) => {
         const done = progress.done.get(day.day);
         const upNext = day.day === progress.upNext;
-        const checked = day.day === selected;
         const photo = workoutPhoto[day.day];
-        const name = `Workout ${day.day}, ${day.title}${done ? `, done ${done.weekday}` : upNext ? ', up next' : ''}${checked ? ', selected' : ''}`;
-        return <button type="button" role="radio" id={`${group}-${day.day}`} key={day.day} className="workout-tile"
-          aria-checked={checked} aria-label={name} tabIndex={checked || (selected == null && upNext) ? 0 : -1}
-          data-done={done ? true : undefined} onClick={() => choose(day.day)}>
+        const name = `Workout ${day.day}, ${day.title}${done ? `, done ${done.weekday}` : upNext ? ', up next' : ''}`;
+        return <button type="button" key={day.day} className="workout-tile" aria-label={name}
+          data-done={done ? true : undefined} onClick={() => open(day)}>
           {photo && <Image src={photo} alt="" fill sizes="180px" />}
           <span className="workout-tile-scrim" aria-hidden="true" />
           {(done || upNext) && <span className="workout-tile-pill" data-done={done ? true : undefined} data-next={upNext || undefined}>
@@ -127,16 +133,5 @@ export function Today({ today, data, programme, initials, openWorkout, openCheck
       </div>
     </div>
     {error && <p className="notice" role="alert">{error}</p>}
-    <div className="screen-actions">
-      <PrimaryButton disabled={!current || busy} onClick={() => current && void start(current)}>
-        {busy ? 'Saving…' : current ? startLabel(current.day, current.type, current.title) : 'All 7 done this week'}
-      </PrimaryButton>
-    </div>
-    {confirmed && confirmedDone && <BottomSheet className="again-sheet" labelId={titleId} onClose={() => setConfirming(null)}>
-      <HeadingSentence id={titleId} className="heading-small" lead={`Do Workout ${confirmed.day} again?`} follow={`You did ${confirmed.title.toLowerCase()} on ${confirmedDone.weekdayLong}.`} />
-      <p className="again-note">It'll be logged as an extra session. Your week still counts it once.</p>
-      <PrimaryButton onClick={() => { setSelected(confirmed.day); setConfirming(null); }}>Do again</PrimaryButton>
-      <PrimaryButton className="button-muted" onClick={() => setConfirming(null)}>Pick another</PrimaryButton>
-    </BottomSheet>}
   </section>;
 }

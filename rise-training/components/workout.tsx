@@ -2,14 +2,14 @@
 
 import { Check, ChevronLeft, Clock3, Play, Square } from 'lucide-react';
 import { useLayoutEffect, useRef, useState } from 'react';
-import { addDays, compactSet, displayDate, lastPerformance, ordinal, restDisplay, scheduledProgrammeDay, weekStart, workoutElapsedMs, workoutsThisWeek } from '@/lib/insights';
+import { addDays, compactSet, displayDate, lastPerformance, ordinal, restDisplay, scheduledProgrammeDay, weekStart, workoutElapsedMs, workoutsDoneThisWeek, workoutsThisWeek } from '@/lib/insights';
 import { effectiveSlot, extraIndex, extraKindFor, extraKinds, extraShown, firstOpenSet, sessionKey, workingSetCount, type ExtraKind, type Session, type SetLog, type TrainingData } from '@/lib/model';
 import { revisionCovering, type ProgrammeSnapshot } from '@/lib/prescription';
 import { canonicalVariant, dayKind, dayTitle, prescribedReps, programmeDays, type Exercise, type Plan } from '@/lib/programme';
 import { programmeExercises, weekPlans, workoutPlan } from '@/lib/weeks';
 import { LogSet, usesBarbell, type LogSetRow } from './log-set';
 import { RestTimer, useRestAudio, type RestDetails } from './rest-timer';
-import { HeadingSentence, Pill, PrimaryButton, RoundButton, Row, RowStack } from './ui';
+import { BottomSheet, HeadingSentence, Pill, PrimaryButton, RoundButton, Row, RowStack } from './ui';
 import type { Mutate } from './training-app';
 
 const errorMessage = (error: unknown) => error instanceof Error ? error.message : 'Could not save. Try again.';
@@ -157,7 +157,7 @@ export function Workout({ date, today, planId, onPlan, onOpen, onLogToday, data,
   const [restMini, setRestMini] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
-  const [confirming, setConfirming] = useState<'discard'>();
+  const [confirming, setConfirming] = useState<'discard' | 'again'>();
   const [showLogged, setShowLogged] = useState(false);
   const opened = useRef(false);
   if (session && !session.finishedAt) opened.current = true;
@@ -247,6 +247,7 @@ export function Workout({ date, today, planId, onPlan, onOpen, onLogToday, data,
 
   async function begin() {
     if (busy || preview || session || !onOpen(planId)) return;
+    setConfirming(undefined);
     setBusy(true);
     setError('');
     try { await mutate({ type: 'start', date, planId }); }
@@ -418,6 +419,7 @@ export function Workout({ date, today, planId, onPlan, onOpen, onLogToday, data,
     </div>;
   }
 
+  const repeated = !preview && !session ? workoutsDoneThisWeek(data, today).done.get(plan.day) : undefined;
   const actionText = session?.finishedAt ? 'Back to Today' : !session ? 'Start workout' : next ? `Continue with ${next.exercise.name}` : 'Submit record';
   const prompt = confirming === 'discard'
     ? { text: 'Are you sure? Discarding deletes this workout, including the sets and the gym time.', confirm: 'Yes, discard', pending: 'Discarding…', cancel: 'Keep workout', run: discard }
@@ -448,11 +450,11 @@ export function Workout({ date, today, planId, onPlan, onOpen, onLogToday, data,
         <p className="fine">{prompt.text}</p>
         <PrimaryButton onClick={() => void prompt.run()} disabled={busy}>{busy ? prompt.pending : prompt.confirm}</PrimaryButton>
         <PrimaryButton className="button-quiet" onClick={() => setConfirming(undefined)} disabled={busy}>{prompt.cancel}</PrimaryButton>
-      </> : !confirming && <>
+      </> : confirming !== 'discard' && <>
         <PrimaryButton disabled={busy} onClick={() => {
           if (preview) onLogToday(plan.id);
           else if (session?.finishedAt) onBack();
-          else if (!session) void begin();
+          else if (!session) { if (repeated) setConfirming('again'); else void begin(); }
           else if (next) void open({ slotId: next.original.id, index: next.index });
           else void finish();
         }}>{busy ? 'Saving…' : preview ? 'Log this workout today' : actionText}</PrimaryButton>
@@ -460,6 +462,12 @@ export function Workout({ date, today, planId, onPlan, onOpen, onLogToday, data,
       </>}
     </div>
     {!confirming && chooseWorkout}
+    {confirming === 'again' && repeated && <BottomSheet className="again-sheet" labelId="workout-again-heading" onClose={() => setConfirming(undefined)}>
+      <HeadingSentence id="workout-again-heading" className="heading-small" lead={`Do Workout ${plan.day} again?`} follow={`You did ${dayTitle(plan).toLowerCase()} on ${repeated.weekdayLong}.`} />
+      <p className="again-note">It'll be logged as an extra session. Your week still counts it once.</p>
+      <PrimaryButton onClick={() => void begin()}>Do again</PrimaryButton>
+      <PrimaryButton className="button-muted" onClick={() => setConfirming(undefined)}>Pick another</PrimaryButton>
+    </BottomSheet>}
     {!confirming && session && !session.finishedAt && next && <details className="disclosure supplementary">
       <summary>Workout options</summary>
       {hasSets && <Pill onClick={() => void finish()} disabled={busy}>Submit record early</Pill>}
