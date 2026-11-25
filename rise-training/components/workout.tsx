@@ -4,7 +4,7 @@ import { Check, ChevronLeft, Clock3, Pause } from 'lucide-react';
 import { useLayoutEffect, useRef, useState } from 'react';
 import { addDays, compactSet, displayDate, lastPerformance, ordinal, restDisplay, scheduledProgrammeDay, weekStart, workoutElapsedMs, workoutsThisWeek } from '@/lib/insights';
 import { effectiveSlot, extraIndex, extraKindFor, extraKinds, extraShown, firstOpenSet, sessionKey, workingSetCount, type ExtraKind, type Session, type SetLog, type TrainingData } from '@/lib/model';
-import { canonicalVariant, dayKind, dayTitle, programmeDays, type Exercise, type Plan } from '@/lib/programme';
+import { canonicalVariant, dayKind, dayTitle, prescribedReps, programmeDays, type Exercise, type Plan } from '@/lib/programme';
 import { programmeExercises, weekPlans, workoutPlan } from '@/lib/weeks';
 import { LogSet, usesBarbell, type LogSetRow } from './log-set';
 import { RestTimer, useRestAudio, type RestDetails } from './rest-timer';
@@ -14,6 +14,13 @@ import type { Mutate } from './training-app';
 const errorMessage = (error: unknown) => error instanceof Error ? error.message : 'Could not save. Try again.';
 const restLabel = (exercise: Exercise) => exercise.rest ? `rest ${restDisplay(exercise.rest)}${exercise.restNote ? ` ${exercise.restNote}` : ''}` : 'no rest prescribed';
 const shortTarget = (exercise: Exercise) => exercise.target.replace(/ reps\b/, '');
+const lastMark = (set: SetLog) => compactSet(set).replace(' kg', '');
+function prescribedLoad(exercise: Exercise) {
+  const reps = prescribedReps(exercise);
+  if (exercise.coachKg != null && reps != null) return `${exercise.coachKg} kg × ${reps}`;
+  if (reps != null) return `${reps} reps`;
+  return exercise.coachWeight || exercise.target || undefined;
+}
 const dateWords = { weekday: 'long', day: 'numeric', month: 'short' } as const;
 const compactName = (name: string) => /^[A-Z]{2,}$/.test(name)
   ? name : name.replace(/^Forearm /i, '').replace(/ (with dumbbells|on cable)$/i, '').toLowerCase();
@@ -334,11 +341,25 @@ export function Workout({ date, today, planId, onPlan, onOpen, onLogToday, data,
     const nextExercise = slots.find((candidate) => candidate !== slot && !candidate.done)?.exercise.name;
     const history = lastPerformance(data, date, exercise.id, variant)?.sets;
 
-    function openRest(upcoming: string) {
+    function openRest(upcoming: string, justLogged?: { number: number; set: SetLog }) {
       if (!exercise.rest) return;
       audio.schedule(exercise.rest);
-      const previous = history?.at(-1);
-      setRest({ startedAt: Date.now(), seconds: exercise.rest, upcoming, last: previous ? `Last ${compactSet(previous)}` : undefined });
+      const continuing = upcoming.startsWith('set ');
+      const nextSlot = slots.find((candidate) => candidate !== slot && !candidate.done);
+      const focus = continuing ? exercise : nextSlot?.exercise;
+      const previous = continuing
+        ? history?.at(-1)
+        : focus ? lastPerformance(data, date, focus.id, nextSlot?.log.variant ?? '')?.sets.at(-1) : undefined;
+      const sample = continuing ? (justLogged?.set ?? logged ?? active.fallback) : undefined;
+      const loggedNumber = justLogged?.number ?? (logged && !kind ? index + 1 : undefined);
+      setRest({
+        startedAt: Date.now(),
+        seconds: exercise.rest,
+        title: loggedNumber ? `${exercise.name} · set ${loggedNumber} logged` : exercise.name,
+        upcoming,
+        next: sample ? compactSet(sample) : focus && upcoming !== 'Submit record' ? prescribedLoad(focus) : undefined,
+        last: previous ? lastMark(previous) : undefined,
+      });
     }
 
     async function save(set: SetLog) {
@@ -349,7 +370,7 @@ export function Workout({ date, today, planId, onPlan, onOpen, onLogToday, data,
       const entry = effectiveSlot(saved.data, date, planId, original);
       const nextIndex = firstOpenSet(original, entry);
       setSelection({ slotId: original.id, index: nextIndex });
-      if (!logged && !kind) openRest(nextIndex == null ? (nextExercise ?? 'Submit record') : `set ${nextIndex + 1} of ${count}`);
+      if (!logged && !kind) openRest(nextIndex == null ? (nextExercise ?? 'Submit record') : `set ${nextIndex + 1} of ${count}`, { number: index + 1, set });
     }
 
     async function complete() {

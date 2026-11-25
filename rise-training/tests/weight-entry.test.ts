@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { overrideWeight } from '../components/log-set.tsx';
+import { overrideWeight } from '../components/log-set';
 
 test('the first digit replaces a prefilled weight wherever it is typed', () => {
   assert.equal(overrideWeight('60', '605'), '5');

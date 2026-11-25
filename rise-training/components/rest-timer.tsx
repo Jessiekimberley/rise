@@ -1,5 +1,6 @@
 'use client';
 
+import { ChevronLeft } from 'lucide-react';
 import { useEffect, useRef, useState } from 'react';
 import { restDisplay } from '@/lib/insights';
 import { scheduleRestChime } from '@/lib/rest-audio';
@@ -7,7 +8,9 @@ import { scheduleRestChime } from '@/lib/rest-audio';
 export type RestDetails = {
   seconds: number;
   startedAt: number;
+  title: string;
   upcoming?: string;
+  next?: string;
   last?: string;
 };
 
@@ -88,17 +91,23 @@ export function RestTimer({ details, audio, close }: { details: RestDetails; aud
     <span className="rest-scrim" aria-hidden="true" />
     <div className="rest-body">
       <div className="rest-toolbar">
-        <span>Rest {restDisplay(details.seconds)}</span>
+        <button type="button" className="rest-back" aria-label="Back to sets" onClick={close}>
+          <ChevronLeft size={20} aria-hidden="true" />
+        </button>
+        <span>{details.title}</span>
+        <span aria-hidden="true" />
       </div>
-      <h2 id="rest-heading">Breathe. Rest.</h2>
-      <div className="rest-ring">
-        <svg aria-hidden="true" viewBox="0 0 272 272">
-          <circle cx="136" cy="136" r={radius} />
-          <circle cx="136" cy="136" r={radius} strokeDasharray={circumference} strokeDashoffset={circumference * (1 - fraction)} />
-        </svg>
-        <div className="rest-face">
-          <span role="timer" aria-live="off">{restDisplay(seconds)}</span>
-          <span>of {restDisplay(details.seconds)}</span>
+      <h2 id="rest-heading">Rest.</h2>
+      <div className="rest-stage">
+        <div className="rest-ring">
+          <svg aria-hidden="true" viewBox="0 0 272 272">
+            <circle cx="136" cy="136" r={radius} />
+            <circle cx="136" cy="136" r={radius} strokeDasharray={circumference} strokeDashoffset={circumference * (1 - fraction)} />
+          </svg>
+          <div className="rest-face">
+            <span role="timer" aria-live="off">{restDisplay(seconds)}</span>
+            <span>of {restDisplay(details.seconds)}</span>
+          </div>
         </div>
       </div>
       <div className="rest-nudges">
@@ -107,8 +116,11 @@ export function RestTimer({ details, audio, close }: { details: RestDetails; aud
       </div>
       <div className="rest-footer">
         {details.upcoming && <div className="rest-next">
-          <span>Up next · {details.upcoming}</span>
-          {details.last && <strong>{details.last}</strong>}
+          <div>
+            <span>Up next · {details.upcoming}</span>
+            {details.next && <strong>{details.next}</strong>}
+          </div>
+          {details.last && <span className="rest-last">Last {details.last}</span>}
         </div>}
         {seconds === 0 && <p className="rest-complete" role="status">Rest complete</p>}
         <button type="button" className="rest-skip" onClick={close}>{seconds === 0 ? 'Continue' : 'Skip rest'}</button>
