@@ -5,9 +5,9 @@ import { useEffect, useId, useState } from 'react';
 import { addDays, blocksForDates, buildReport, datesThrough, dayHeading, displayDate, setWork, trainingWeekStart, type ReportDay, type ReportSet } from '@/lib/insights';
 import type { CheckIn, TrainingData } from '@/lib/model';
 import { docUrl, type DocTarget } from '@/lib/coach-doc';
-import { setsCsv } from '@/lib/workout-export';
+import { exportBaseName, setsPdf, setsWorkbook } from '@/lib/workout-export';
 import { WeeklyCheckInLink } from './weekly-check-in';
-import { BottomSheet, HeadingSentence, Pill, PrimaryButton, RoundButton, Row, RowStack } from './ui';
+import { BottomSheet, ChipGroup, HeadingSentence, Pill, PrimaryButton, RoundButton, Row, RowStack } from './ui';
 import type { Mutate } from './training-app';
 
 const dateWords = { weekday: 'long', day: 'numeric', month: 'long' } as const;
@@ -78,8 +78,10 @@ function exportDetail(date: string, days: ReportDay[]) {
   }).join(', ');
 }
 
-function downloadCsv(name: string, csv: string) {
-  const url = URL.createObjectURL(new Blob([csv], { type: 'text/csv;charset=utf-8' }));
+function downloadFile(name: string, bytes: Uint8Array, type: string) {
+  const copy = new Uint8Array(bytes.byteLength);
+  copy.set(bytes);
+  const url = URL.createObjectURL(new Blob([copy], { type }));
   const link = document.createElement('a');
   link.href = url;
   link.download = name;
@@ -89,23 +91,20 @@ function downloadCsv(name: string, csv: string) {
   URL.revokeObjectURL(url);
 }
 
-function exportName(chosen: string[], week: string[]) {
-  const sorted = [...chosen].sort();
-  if (sorted.length === 1) return `rise-sets-${sorted[0]}.csv`;
-  if (sorted.length === week.length && sorted.every((date, index) => date === week[index])) return `rise-sets-week-${week[0]}.csv`;
-  return `rise-sets-${sorted[0]}-to-${sorted[sorted.length - 1]}.csv`;
-}
-
 function ExportSets({ data, week, onClose }: { data: TrainingData; week: string[]; onClose: () => void }) {
   const titleId = useId();
   const days = blocksForDates(data, week);
   const logged = week.filter((date) => days.some((day) => day.date === date && (day.sets.length || day.lines.length)));
   const [picked, setPicked] = useState(() => new Set(logged));
+  const [format, setFormat] = useState<'pdf' | 'xlsx'>('pdf');
 
   function save(dates: string[]) {
     const chosen = [...dates].sort();
     if (!chosen.length) return;
-    downloadCsv(exportName(chosen, week), setsCsv(blocksForDates(data, chosen)));
+    const log = blocksForDates(data, chosen);
+    const base = exportBaseName(chosen, week);
+    if (format === 'pdf') downloadFile(`${base}.pdf`, setsPdf(log), 'application/pdf');
+    else downloadFile(`${base}.xlsx`, setsWorkbook(log), 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
     onClose();
   }
 
@@ -120,7 +119,7 @@ function ExportSets({ data, week, onClose }: { data: TrainingData; week: string[
 
   return <BottomSheet labelId={titleId} onClose={onClose}>
     <h2 id={titleId} className="heading-sentence heading-small">Export sets</h2>
-    <p className="fine">Choose days, or export the whole week. This downloads a spreadsheet.</p>
+    <p className="fine">PDF is a tidy log. Excel is a simple sheet.</p>
     <div className="export-days" role="group" aria-label="Days to export">
       {week.map((date) => <label key={date} className="export-day">
         <input type="checkbox" checked={picked.has(date)} onChange={() => toggle(date)} />
@@ -130,8 +129,12 @@ function ExportSets({ data, week, onClose }: { data: TrainingData; week: string[
         </span>
       </label>)}
     </div>
-    <PrimaryButton onClick={() => save([...picked])} disabled={!picked.size}>Export selected days</PrimaryButton>
-    <PrimaryButton className="button-quiet" onClick={() => save(week)}>Export whole week</PrimaryButton>
+    <ChipGroup className="chips-two" label="Export format" value={format} onChange={(value) => setFormat(value === 'xlsx' ? 'xlsx' : 'pdf')} options={[
+      { value: 'pdf', label: 'PDF' },
+      { value: 'xlsx', label: 'Excel' },
+    ]} />
+    <PrimaryButton onClick={() => save([...picked])} disabled={!picked.size}>Download {format === 'pdf' ? 'PDF' : 'Excel'}</PrimaryButton>
+    <PrimaryButton className="button-quiet" onClick={() => save(week)}>Whole week as {format === 'pdf' ? 'PDF' : 'Excel'}</PrimaryButton>
   </BottomSheet>;
 }
 

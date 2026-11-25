@@ -223,7 +223,6 @@ export function LogSet({ rows, active, exerciseNumber, exerciseCount, workSetCou
   function armWeight(row: LogSetRow, input: HTMLInputElement) {
     if (locked) return;
     select(row.index);
-    if (finishing) return;
     replaceWeight.current.add(rowKey(row));
     const selectAll = () => {
       if (document.activeElement === input) input.setSelectionRange(0, input.value.length);

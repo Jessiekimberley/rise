@@ -14,7 +14,8 @@ import { schema, trainingStore } from '../lib/storage';
 import { readWeeks, docTarget, type DocContent } from '../lib/coach-doc';
 import { programmeWeek, workoutPlan } from '../lib/weeks';
 import { scheduleRestChime } from '../lib/rest-audio';
-import { setsCsv, workoutCsv } from '../lib/workout-export';
+import { readStoredZip } from '../lib/plain-xlsx';
+import { setsPdf, setsWorkbook, workoutCsv } from '../lib/workout-export';
 
 test('the training date rolls over at Auckland midnight in summer and winter', () => {
   assert.equal(todayKey(new Date('2026-11-24T10:59:59Z')), '2026-11-24');
@@ -319,11 +320,22 @@ test('workout, concurrent set saves, habits and coach report survive a database 
     assert.doesNotMatch(report.text, /Good energy/);
     const selected = blocksForDates(snapshot.data, [date, '2026-11-24', '2026-11-25']);
     assert.equal(selected.find((day) => day.date === '2026-11-24')?.sets.length, 0);
-    const sets = setsCsv(selected);
-    assert.match(sets, /^\uFEFF"Day","Workout","Status","Exercise"/);
-    assert.match(sets, /"Monday, 23 Nov 2026","Lower body","Finished","Leg Press",2,47\.5,"8","2"/);
-    assert.match(sets, /"Tuesday, 24 Nov 2026"(,""){7},"No sets logged"/);
-    assert.ok(sets.includes('Leg Press notes'));
+    const pdf = new TextDecoder().decode(setsPdf(selected));
+    assert.match(pdf, /^%PDF-1.4\n/);
+    assert.match(pdf, /%%EOF\n$/);
+    assert.ok(pdf.includes('(Leg Press)'));
+    assert.ok(pdf.includes('(47.5)'));
+    assert.ok(pdf.includes('(No sets logged)'));
+    assert.ok(pdf.includes('Paused'));
+    assert.ok(pdf.includes('Finished'));
+    const sheet = readStoredZip(setsWorkbook(selected)).get('xl/worksheets/sheet1.xml') ?? '';
+    assert.match(sheet, /Monday, 23 Nov 2026 · Lower body · Finished/);
+    assert.match(sheet, /Leg Press/);
+    assert.match(sheet, /<v>47\.5<\/v>/);
+    assert.match(sheet, /No sets logged/);
+    assert.match(sheet, /Paused/);
+    assert.match(sheet, /9,100/);
+    assert.doesNotMatch(sheet, /<f>/);
     const csv = workoutCsv(snapshot.data);
     assert.match(csv, /^\uFEFF"Workout date","Workout","Programme day","Status"/);
     assert.match(csv, /"2026-11-23",[^\r\n]+"Finished",[^\r\n]+"Back squat","Barbell","Warm-up",,20,8/);
