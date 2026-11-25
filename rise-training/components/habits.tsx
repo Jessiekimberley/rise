@@ -4,16 +4,11 @@ import Image from 'next/image';
 import { useEffect, useRef, useState, type ChangeEvent, type KeyboardEvent } from 'react';
 import { displayDate, formatCount, formatHours, goalSpan } from '@/lib/insights';
 import { emptyHabits, type HabitLog } from '@/lib/model';
+import type { ProgrammeHabits } from '@/lib/prescription';
 import { habitTargets } from '@/lib/programme';
 import { HeadingSentence, Pill } from './ui';
 import type { Mutate } from './training-app';
 
-const stepsGoal = habitTargets.steps;
-const waterGoal = habitTargets.hydrationLitres;
-const sleepGoal = habitTargets.sleepHours;
-const stepsRange = goalSpan(stepsGoal.min, stepsGoal.max);
-const waterRange = goalSpan(waterGoal.min, waterGoal.max);
-const sleepRange = goalSpan(sleepGoal.min, sleepGoal.max);
 const reminders = habitTargets.nutrition.habits;
 
 type Field = 'steps' | 'sleep' | 'sleep-note' | 'fuel' | 'water';
@@ -40,7 +35,13 @@ function barWidth(value: number, full: number) {
   return Math.min(100, Math.round((value / full) * 100));
 }
 
-export function Habits({ date, log = emptyHabits, mutate }: { date: string; log?: HabitLog; mutate: Mutate }) {
+export function Habits({ date, log = emptyHabits, goals, mutate }: { date: string; log?: HabitLog; goals: ProgrammeHabits; mutate: Mutate }) {
+  const stepsGoal = goals.steps;
+  const waterGoal = goals.hydrationLitres;
+  const sleepGoal = goals.sleepHours;
+  const stepsRange = goalSpan(stepsGoal.min, stepsGoal.max);
+  const waterRange = goalSpan(waterGoal.min, waterGoal.max);
+  const sleepRange = goalSpan(sleepGoal.min, sleepGoal.max);
   const [stepsOpen, setStepsOpen] = useState(false);
   const [stepsDraft, setStepsDraft] = useState('');
   const [sleepEditor, setSleepEditor] = useState<SleepEditor>(null);

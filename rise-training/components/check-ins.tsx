@@ -1,8 +1,8 @@
 'use client';
 
 import { ChevronLeft, ChevronRight } from 'lucide-react';
-import { useEffect, useId, useState } from 'react';
-import { addDays, blocksForDates, buildReport, datesThrough, dayHeading, displayDate, setWork, trainingWeekStart, type ReportDay, type ReportSet } from '@/lib/insights';
+import { useEffect, useId, useRef, useState } from 'react';
+import { addDays, blocksForDates, buildReport, datesThrough, dayHeading, dayNoteLine, displayDate, setWork, trainingWeekStart, type HabitGoals, type ReportDay, type ReportSet } from '@/lib/insights';
 import type { CheckIn, TrainingData } from '@/lib/model';
 import { docUrl, type DocTarget } from '@/lib/coach-doc';
 import { exportBaseName, setsPdf, setsWorkbook } from '@/lib/workout-export';
@@ -19,19 +19,74 @@ function workCell(set: ReportSet) {
 
 function dayMeta(day: ReportDay) {
   const count = day.sets.length;
-  return [day.inProgress ? 'In progress' : '', count ? `${count} ${count === 1 ? 'set' : 'sets'}` : ''].filter(Boolean).join(' · ');
+  return [day.inProgress ? 'In progress' : '', count ? `${count} ${count === 1 ? 'set' : 'sets'}` : '', day.dayNote ? 'Note' : ''].filter(Boolean).join(' · ');
 }
 
 function dayTitle(day: ReportDay) {
   if (day.workout) return `${day.heading} · ${day.workout}`;
-  if (day.lines.length) return `${day.heading} · Habits`;
+  if (day.lines.includes('Habits')) return `${day.heading} · Habits`;
   return day.heading;
 }
 
-function LogDay({ day }: { day: ReportDay }) {
+function DayNote({ date, note, mutate }: { date: string; note: string; mutate: Mutate }) {
+  const [editing, setEditing] = useState(false);
+  const [draft, setDraft] = useState(note);
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState('');
+  const input = useRef<HTMLTextAreaElement>(null);
+  const trimmed = draft.trim();
+
+  useEffect(() => {
+    if (!editing) setDraft(note);
+  }, [note, editing]);
+
+  useEffect(() => {
+    if (editing) input.current?.focus();
+  }, [editing]);
+
+  async function save() {
+    if (busy || trimmed === note) {
+      setEditing(false);
+      return;
+    }
+    setBusy(true);
+    setError('');
+    try {
+      await mutate({ type: 'dayNote', date, text: trimmed });
+      setEditing(false);
+    } catch (reason) {
+      setError(errorMessage(reason));
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return <div className="log-day-note">
+    {editing ? <>
+      <textarea ref={input} className="habit-note-input" rows={3} maxLength={2_000} aria-label="Notes for this day"
+        placeholder="How did the day go?" value={draft} disabled={busy}
+        onChange={(event) => setDraft(event.target.value)} />
+      {error && <p className="notice" role="alert">{error}</p>}
+      <div className="log-day-note-actions">
+        <Pill className="pill-tile pill-dark" disabled={busy || trimmed === note} onClick={() => void save()}>
+          {busy ? 'Saving…' : trimmed ? 'Save note' : note ? 'Remove note' : 'Save note'}
+        </Pill>
+        <Pill className="pill-tile" disabled={busy} onClick={() => { setDraft(note); setError(''); setEditing(false); }}>Cancel</Pill>
+      </div>
+    </> : <>
+      {note && <p className="habit-saved-note">{note}</p>}
+      <Pill className="pill-tile" onClick={() => { setDraft(note); setEditing(true); }}>{note ? 'Edit note' : '+ Note'}</Pill>
+    </>}
+  </div>;
+}
+
+function LogDay({ day, mutate, noted }: { day: ReportDay; mutate: Mutate; noted: boolean }) {
   const showRir = day.sets.some((set) => set.rir);
   const timed = day.sets.length > 0 && day.sets.every((set) => set.seconds != null);
   const meta = dayMeta(day);
+  const noteLine = day.dayNote ? dayNoteLine(day.dayNote) : '';
+  const lines = noteLine ? day.lines.filter((line) => line !== noteLine) : day.lines;
+  const empty = !day.sets.length && !lines.length && !day.dayNote;
   return <details className="log-day" onToggle={(event) => {
     if (event.currentTarget.open) event.currentTarget.scrollIntoView({ block: 'nearest' });
   }}>
@@ -63,7 +118,9 @@ function LogDay({ day }: { day: ReportDay }) {
           </tr>)}
         </tbody>
       </table>}
-      {day.lines.length > 0 && <div className="log-notes">{day.lines.map((line, index) => <p key={index}>{line}</p>)}</div>}
+      {lines.length > 0 && <div className="log-notes">{lines.map((line, index) => <p key={index}>{line}</p>)}</div>}
+      {empty && <p className="fine log-day-empty">No sets logged</p>}
+      {noted && <DayNote date={day.date} note={day.dayNote ?? ''} mutate={mutate} />}
     </div>
   </details>;
 }
@@ -72,7 +129,7 @@ function exportDetail(date: string, days: ReportDay[]) {
   const mine = days.filter((day) => day.date === date && (day.sets.length || day.lines.length));
   if (!mine.length) return 'No sets logged';
   return mine.map((day) => {
-    const name = day.workout || 'Habits';
+    const name = day.workout || (day.lines.includes('Habits') ? 'Habits' : day.dayNote ? 'Note' : 'Logged');
     const count = day.sets.length ? ` · ${day.sets.length} ${day.sets.length === 1 ? 'set' : 'sets'}` : '';
     return `${name}${day.inProgress ? ' · in progress' : ''}${count}`;
   }).join(', ');
@@ -91,9 +148,9 @@ function downloadFile(name: string, bytes: Uint8Array, type: string) {
   URL.revokeObjectURL(url);
 }
 
-function ExportSets({ data, week, onClose }: { data: TrainingData; week: string[]; onClose: () => void }) {
+function ExportSets({ data, week, goalsFor, onClose }: { data: TrainingData; week: string[]; goalsFor?: (date: string) => HabitGoals; onClose: () => void }) {
   const titleId = useId();
-  const days = blocksForDates(data, week);
+  const days = blocksForDates(data, week, goalsFor);
   const logged = week.filter((date) => days.some((day) => day.date === date && (day.sets.length || day.lines.length)));
   const [picked, setPicked] = useState(() => new Set(logged));
   const [format, setFormat] = useState<'pdf' | 'xlsx'>('pdf');
@@ -101,7 +158,7 @@ function ExportSets({ data, week, onClose }: { data: TrainingData; week: string[
   function save(dates: string[]) {
     const chosen = [...dates].sort();
     if (!chosen.length) return;
-    const log = blocksForDates(data, chosen);
+    const log = blocksForDates(data, chosen, goalsFor);
     const base = exportBaseName(chosen, week);
     if (format === 'pdf') downloadFile(`${base}.pdf`, setsPdf(log), 'application/pdf');
     else downloadFile(`${base}.xlsx`, setsWorkbook(log), 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
@@ -205,8 +262,8 @@ function LogEditor({ entry, data, onBack, onDone, mutate }: {
   </section>;
 }
 
-export function CheckIns({ date, data, mutate, destination, setFocused }: {
-  date: string; data: TrainingData; mutate: Mutate;
+export function CheckIns({ date, data, mutate, destination, goalsFor, setFocused }: {
+  date: string; data: TrainingData; mutate: Mutate; goalsFor?: (date: string) => HabitGoals;
   destination?: DocTarget; setFocused: (focused: boolean) => void;
 }) {
   const [editingId, setEditingId] = useState<string>();
@@ -215,7 +272,8 @@ export function CheckIns({ date, data, mutate, destination, setFocused }: {
   const weekEnd = addDays(start, 6);
   const week = datesThrough(start, weekEnd);
   const end = date < weekEnd ? date : weekEnd;
-  const report = buildReport(data, 'weekly', start, end);
+  const report = buildReport(data, 'weekly', start, end, goalsFor);
+  const days = blocksForDates(data, datesThrough(start, end), goalsFor);
   const history = Object.values(data.checkIns).sort((a, b) => b.end.localeCompare(a.end) || (b.publishedAt ?? '').localeCompare(a.publishedAt ?? ''));
   const editing = editingId ? data.checkIns[editingId] : undefined;
 
@@ -252,14 +310,15 @@ export function CheckIns({ date, data, mutate, destination, setFocused }: {
     </header>
     <section className="log-week" aria-label="Training log">
       <h2 className="log-week-title">{report.title}</h2>
-      {report.days.length ? <div className="log-days">{report.days.map((day) => <LogDay key={`${day.date}:${day.order}`} day={day} />)}</div>
+      {days.length ? <div className="log-days">{days.map((day, index) => <LogDay key={`${day.date}:${day.order}`} day={day} mutate={mutate}
+        noted={days.slice(index + 1).every((item) => item.date !== day.date)} />)}</div>
         : <p className="fine">No sets logged for this week yet.</p>}
     </section>
     <div className="screen-actions">
       <PrimaryButton onClick={() => setExporting(true)}>Export</PrimaryButton>
       <WeeklyCheckInLink />
     </div>
-    {exporting && <ExportSets data={data} week={week} onClose={() => setExporting(false)} />}
+    {exporting && <ExportSets data={data} week={week} goalsFor={goalsFor} onClose={() => setExporting(false)} />}
     <details className="disclosure supplementary">
       <summary>Previous logs</summary>
       {destination && <div className="check-in-extras"><Pill href={docUrl(destination)}>Open coaching Doc</Pill></div>}

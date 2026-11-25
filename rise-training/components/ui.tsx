@@ -1,7 +1,7 @@
 'use client';
 
 import Image from 'next/image';
-import { ArrowRight, Droplet, Dumbbell, House, MessageSquare } from 'lucide-react';
+import { ArrowRight, ClipboardList, Droplet, Dumbbell, House, MessageSquare } from 'lucide-react';
 import { useEffect, useId, useRef, type ButtonHTMLAttributes, type ComponentPropsWithoutRef, type ReactNode } from 'react';
 
 export const tabs = [
@@ -9,6 +9,7 @@ export const tabs = [
   { id: 'train', label: 'Train', icon: Dumbbell },
   { id: 'habits', label: 'Habits', icon: Droplet },
   { id: 'check-ins', label: 'Check-in', icon: MessageSquare },
+  { id: 'programme', label: 'Programme', icon: ClipboardList },
 ] as const;
 
 export type Tab = typeof tabs[number]['id'];

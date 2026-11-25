@@ -13,6 +13,11 @@ export type Exercise = {
   variants?: string[];
   coachWeight?: string;
   coachKg?: number;
+  warmupSets?: number;
+  rirTarget?: number | null;
+  rpeTarget?: number | null;
+  coachNote?: string;
+  progression?: string;
 };
 
 export type Plan = { id: string; day: number; name: string; exercises: Exercise[] };

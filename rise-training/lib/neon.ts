@@ -1,5 +1,5 @@
 import { neon } from '@neondatabase/serverless';
-import { schema, trainingStore, type Query } from './storage';
+import { programmeSchema, programmeStore, schema, trainingStore, type Query } from './storage';
 
 const devGlobal = globalThis as typeof globalThis & { riseLocalQueries?: Map<string, Promise<Query>> };
 
@@ -10,7 +10,7 @@ function developmentQuery(path: string): Promise<Query> {
   if (existing) return existing;
   const query = import('@electric-sql/pglite').then(async ({ PGlite }) => {
     const database = new PGlite(path);
-    await database.exec(schema);
+    await database.exec(`${schema}\n${programmeSchema}`);
     return (async (sql, values) => (await database.query<Record<string, unknown>>(sql, values)).rows) satisfies Query;
   }).catch((error) => {
     queries.delete(path);
@@ -24,6 +24,14 @@ export function neonQuery() {
   const url = process.env.DATABASE_URL;
   if (!url) throw new Error('Neon database connection is missing.');
   return neon(url).query;
+}
+
+export function productionProgramme() {
+  const localDatabase = process.env.RISE_LOCAL_DATABASE;
+  if (process.env.NODE_ENV === 'development' && localDatabase) {
+    return programmeStore(async (sql, values) => (await developmentQuery(localDatabase))(sql, values));
+  }
+  return programmeStore(neonQuery());
 }
 
 export function productionStore() {

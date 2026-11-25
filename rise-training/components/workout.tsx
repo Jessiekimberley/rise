@@ -4,6 +4,7 @@ import { Check, ChevronLeft, Clock3, Play, Square } from 'lucide-react';
 import { useLayoutEffect, useRef, useState } from 'react';
 import { addDays, compactSet, displayDate, lastPerformance, ordinal, restDisplay, scheduledProgrammeDay, weekStart, workoutElapsedMs, workoutsThisWeek } from '@/lib/insights';
 import { effectiveSlot, extraIndex, extraKindFor, extraKinds, extraShown, firstOpenSet, sessionKey, workingSetCount, type ExtraKind, type Session, type SetLog, type TrainingData } from '@/lib/model';
+import { revisionCovering, type ProgrammeSnapshot } from '@/lib/prescription';
 import { canonicalVariant, dayKind, dayTitle, prescribedReps, programmeDays, type Exercise, type Plan } from '@/lib/programme';
 import { programmeExercises, weekPlans, workoutPlan } from '@/lib/weeks';
 import { LogSet, usesBarbell, type LogSetRow } from './log-set';
@@ -13,6 +14,10 @@ import type { Mutate } from './training-app';
 
 const errorMessage = (error: unknown) => error instanceof Error ? error.message : 'Could not save. Try again.';
 const restLabel = (exercise: Exercise) => exercise.rest ? `rest ${restDisplay(exercise.rest)}${exercise.restNote ? ` ${exercise.restNote}` : ''}` : 'no rest prescribed';
+const effortMark = (exercise: Exercise) => exercise.rirTarget != null ? ` · RIR ${exercise.rirTarget >= 3 ? '3+' : exercise.rirTarget}` : exercise.rpeTarget != null ? ` · RPE ${exercise.rpeTarget}` : '';
+function dayOn(programme: ProgrammeSnapshot, data: TrainingData, date: string) {
+  return revisionCovering(programme.state, date)?.days[scheduledProgrammeDay(date, data) - 1] ?? programmeDays[scheduledProgrammeDay(date, data) - 1];
+}
 const shortTarget = (exercise: Exercise) => exercise.target.replace(/ reps\b/, '');
 const lastMark = (set: SetLog) => compactSet(set).replace(' kg', '');
 function prescribedLoad(exercise: Exercise) {
@@ -31,8 +36,8 @@ function planBlurb(plan: Plan) {
   return `${names}. ${sets} sets.`;
 }
 
-function LoggedWorkout({ plan, session, data, today, onBack, onPreview }: {
-  plan: Plan; session: Session; data: TrainingData; today: string;
+function LoggedWorkout({ plan, session, data, programme, today, onBack, onPreview }: {
+  plan: Plan; session: Session; data: TrainingData; programme: ProgrammeSnapshot; today: string;
   onBack: () => void; onPreview: (planId: string, date: string) => void;
 }) {
   const count = workoutsThisWeek(data, session.date);
@@ -42,14 +47,14 @@ function LoggedWorkout({ plan, session, data, today, onBack, onPreview }: {
     : `Your ${ordinal(count)} workout in the week of ${displayDate(weekStart(session.date))}.`;
   const tomorrow = addDays(today, 1);
   const tomorrowDay = scheduledProgrammeDay(tomorrow, data);
-  const tomorrowDefinition = programmeDays[tomorrowDay - 1];
-  const tomorrowPlan = weekPlans(data, tomorrow).find((item) => item.day === tomorrowDay);
+  const tomorrowDefinition = dayOn(programme, data, tomorrow);
+  const tomorrowPlan = weekPlans(data, tomorrow, undefined, programme).find((item) => item.day === tomorrowDay);
   let later: { date: string; plan: Plan } | undefined;
   if (!tomorrowPlan) {
     for (let offset = 1; offset < 7; offset += 1) {
       const date = addDays(tomorrow, offset);
       const day = scheduledProgrammeDay(date, data);
-      const next = weekPlans(data, date).find((item) => item.day === day);
+      const next = weekPlans(data, date, undefined, programme).find((item) => item.day === day);
       if (next) { later = { date, plan: next }; break; }
     }
   }
@@ -118,13 +123,15 @@ function Cues({ exercise, variant, back }: {
     <div className="screen-toolbar">
       <RoundButton aria-label="Back to sets" onClick={back}><ChevronLeft size={20} /></RoundButton>
     </div>
-    <HeadingSentence lead={`${exercise.name}.`} follow={`${variant ? `${canonicalVariant(exercise.id, variant)}, ` : ''}${exercise.sets} sets of ${shortTarget(exercise)}, ${restLabel(exercise)}.`} />
+    <HeadingSentence lead={`${exercise.name}.`} follow={`${variant ? `${canonicalVariant(exercise.id, variant)}, ` : ''}${exercise.warmupSets ? `${exercise.warmupSets} warm-up, ` : ''}${exercise.sets} sets of ${shortTarget(exercise)}, ${restLabel(exercise)}${effortMark(exercise)}.`} />
     <div className="cues-content">
       <section className="cues-block" aria-label="Brenna’s cues">
-        <h2 className="fine">Brenna’s cues</h2>
+        <h2 className="fine">Technique</h2>
         {cues.length ? <ul>{cues.map((cue, index) => <li key={index}>{cue[0].toUpperCase() + cue.slice(1)}</li>)}</ul>
-          : <p>No cues in your programme yet.</p>}
+          : <p>No technique notes in the programme yet.</p>}
       </section>
+      {exercise.coachNote && <section className="cues-block" aria-label="Coaching note"><h2 className="fine">Coaching note</h2><p>{exercise.coachNote}</p></section>}
+      {exercise.progression && <section className="cues-block" aria-label="Progression"><h2 className="fine">Progression</h2><p>{exercise.progression}</p></section>}
     </div>
     <div className="screen-actions">
       <PrimaryButton onClick={back}>Back to sets</PrimaryButton>
@@ -134,13 +141,13 @@ function Cues({ exercise, variant, back }: {
 
 type Selection = { slotId: string; index?: number };
 
-export function Workout({ date, today, planId, onPlan, onOpen, onLogToday, data, mutate, onBack, onPreview, setFocused }: {
-  date: string; today: string; planId: string; onPlan: (id: string) => void; data: TrainingData; mutate: Mutate;
+export function Workout({ date, today, planId, onPlan, onOpen, onLogToday, data, programme, mutate, onBack, onPreview, setFocused }: {
+  date: string; today: string; planId: string; onPlan: (id: string) => void; data: TrainingData; programme: ProgrammeSnapshot; mutate: Mutate;
   onOpen: (id: string) => boolean; onLogToday: (id: string) => void;
   onBack: () => void; onPreview: (planId: string, date: string) => void; setFocused: (focused: boolean) => void;
 }) {
-  const plans = weekPlans(data, date);
-  const plan = workoutPlan(data, date, planId);
+  const plans = weekPlans(data, date, undefined, programme);
+  const plan = workoutPlan(data, date, planId, programme);
   const session = plan && data.sessions[sessionKey(date, plan.id)];
   const roster = programmeExercises(data, plan ? [plan, ...plans] : plans);
   const [selection, setSelection] = useState<Selection>();
@@ -203,7 +210,7 @@ export function Workout({ date, today, planId, onPlan, onOpen, onLogToday, data,
   </section>;
 
   if (showLogged && session?.finishedAt) {
-    return <LoggedWorkout plan={plan} session={session} data={data} today={today} onBack={onBack} onPreview={onPreview} />;
+    return <LoggedWorkout plan={plan} session={session} data={data} programme={programme} today={today} onBack={onBack} onPreview={onPreview} />;
   }
 
   const slots = plan.exercises.map((original) => {
@@ -297,12 +304,18 @@ export function Workout({ date, today, planId, onPlan, onOpen, onLogToday, data,
     const active = rowFor(index, kind ? log[kind] : log.sets[index]);
     const { exercise, variant, logged } = active;
     const barbell = usesBarbell(selectedExercise, log.variant);
+    const showWarmup = barbell || (original.warmupSets ?? 0) > 0;
     const rows = [
-      ...extraKinds.flatMap((item) => extraShown(log, item, barbell) ? [rowFor(extraIndex[item], log[item])] : []),
+      ...extraKinds.flatMap((item) => extraShown(log, item, showWarmup) ? [rowFor(extraIndex[item], log[item])] : []),
       ...Array.from({ length: count }, (_, position) => rowFor(position, log.sets[position])),
     ];
 
-    const prescription = { ...exercise, sets: count };
+    const prescription = {
+      ...original, ...exercise, sets: count, cue: exercise.cue || original.cue,
+      coachNote: exercise.coachNote || original.coachNote, progression: exercise.progression || original.progression,
+      rirTarget: exercise.rirTarget ?? original.rirTarget, rpeTarget: exercise.rpeTarget ?? original.rpeTarget,
+      warmupSets: exercise.warmupSets ?? original.warmupSets,
+    };
     const activeNumber = slots.indexOf(slot) + 1;
     const commandSlot = { date, planId: plan.id, slotId: original.id };
     const nextExercise = slots.find((candidate) => candidate !== slot && !candidate.done)?.exercise.name;
@@ -414,7 +427,7 @@ export function Workout({ date, today, planId, onPlan, onOpen, onLogToday, data,
         const prior = lastPerformance(data, date, exercise.id, log.variant)?.sets.at(-1);
         const upcoming = session && !session.finishedAt && next?.original.id === original.id;
         return <Row key={original.id} className={done ? 'workout-row-done' : upcoming ? 'workout-row-next' : ''} current={upcoming}
-          label={<>{`${workingSetCount(original.sets, log)} × ${shortTarget(exercise)} · ${restLabel(exercise)}`}
+          label={<>{`${original.warmupSets ? `${original.warmupSets} warm-up · ` : ''}${workingSetCount(original.sets, log)} × ${shortTarget(exercise)} · ${restLabel(exercise)}${effortMark(original)}`}
             {(log.note ?? '').trim() && <span className="exercise-note">{log.note.trim()}</span>}</>}
           value={`${exercise.name}${log.variant ? ` · ${canonicalVariant(exercise.id, log.variant)}` : ''}`}
           onClick={preview || busy || confirming || !session ? undefined : () => void open({ slotId: original.id, index })}

@@ -1,5 +1,5 @@
 import { displayDate, setWork, type ReportDay, type ReportSet } from './insights';
-import type { SetLog, TrainingData } from './model';
+import { orderedSlots, type SetLog, type TrainingData } from './model';
 import { PdfWriter, pdfPage, textWidth, wrapText, type Rgb } from './plain-pdf';
 import { cellStyle, packageXlsx, xmlText } from './plain-xlsx';
 import { programmeExercises, workoutPlan } from './weeks';
@@ -33,7 +33,7 @@ export function workoutCsv(data: TrainingData) {
       session.startedAt, session.finishedAt,
     ];
     const firstRow = rows.length;
-    for (const [slotId, slot] of Object.entries(session.slots)) {
+    for (const [slotId, slot] of orderedSlots(session)) {
       const planned = plan?.exercises.find((item) => item.id === slotId)?.name ?? exercise(slotId)?.name ?? slotId;
       function addSet(set: SetLog, entry: string, index?: number) {
         const lift = exercise(set.exerciseId);

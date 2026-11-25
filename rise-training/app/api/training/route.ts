@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server';
 import { isSameOrigin, ownerId } from '@/lib/access';
 import { commandSchema, TrainingValidationError } from '@/lib/model';
-import { productionStore } from '@/lib/neon';
+import { productionProgramme, productionStore } from '@/lib/neon';
 import { trainingLogView } from '@/lib/storage';
 
 export async function POST(request: Request) {
@@ -11,7 +11,8 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: 'Some of the values could not be saved. Check the entry and try again.' }, { status: 400 });
   }
   try {
-    const snapshot = await productionStore().mutate(ownerId, parsed.data);
+    const prescription = await productionProgramme().load(ownerId);
+    const snapshot = await productionStore().mutate(ownerId, parsed.data, prescription);
     return NextResponse.json(trainingLogView(snapshot, true));
   } catch (error) {
     if (error instanceof TrainingValidationError) return NextResponse.json({ error: error.message }, { status: 400 });

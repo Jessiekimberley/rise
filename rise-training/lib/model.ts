@@ -1,5 +1,6 @@
 import { z } from 'zod';
-import { canonicalVariant, exerciseOptions, type Exercise, type Plan } from './programme';
+import type { ProgrammeSnapshot } from './prescription';
+import { canonicalVariant, exerciseOptions, findPlan, type Exercise, type Plan } from './programme';
 import { mondayOf, programmeExercises, weekPlans, workoutPlan, type CoachWeek } from './weeks';
 import type { DocTarget } from './coach-doc';
 
@@ -59,6 +60,7 @@ export const commandSchema = z.discriminatedUnion('type', [
   z.object({ type: z.literal('saveWarmup'), ...slot, kind: z.enum(['warmup', 'upper', 'lower']).optional(), set: setSchema.nullable() }),
   z.object({ type: z.literal('substitute'), ...slot, exerciseId: key, variant: variation, recurring: z.boolean().optional() }),
   z.object({ type: z.literal('note'), ...slot, text }),
+  z.object({ type: z.literal('dayNote'), date, text }),
   z.object({ type: z.literal('habits'), date, data: habitsSchema }),
   z.object({ type: z.literal('patchHabits'), date, data: habitsSchema.partial() }),
   z.object({ type: z.literal('bottleSize'), litres: z.number().finite().min(0.05).max(5) }),
@@ -104,6 +106,7 @@ export type Session = {
   pausedMs?: number;
   plan?: Plan;
   slots: Record<string, SlotLog>;
+  slotOrder?: string[];
 };
 export type TrainingData = {
   sessions: Record<string, Session>;
@@ -115,6 +118,7 @@ export type TrainingData = {
   recurringSwaps?: Record<string, { exerciseId: string; variant: string; from: string }>;
   bottleLitres?: number;
   scheduledDays?: Record<string, number>;
+  dayNotes?: Record<string, string>;
 };
 export type TrainingSnapshot = { revision: number; data: TrainingData };
 
@@ -137,6 +141,36 @@ export function workingSetCount(prescribed: number, log: Pick<SlotLog, 'sets' | 
 export function firstOpenSet(exercise: Exercise, log: Pick<SlotLog, 'sets' | 'setCount'>) {
   const count = workingSetCount(exercise.sets, log);
   return Array.from({ length: count }, (_, index) => index).find((index) => !log.sets[index]);
+}
+
+function slotHasWork(slot: SlotLog) {
+  return Object.keys(slot.sets).length > 0 || Boolean(slot.warmup || slot.upper || slot.lower);
+}
+
+export function orderedSlots(session: Session): [string, SlotLog][] {
+  const ids = Object.keys(session.slots);
+  const planIds = (session.plan?.exercises ?? findPlan(session.planId)?.exercises ?? []).map((exercise) => exercise.id);
+  const planRank = new Map(planIds.map((id, index) => [id, index]));
+  const byPlan = (a: string, b: string) => (planRank.get(a) ?? 1_000) - (planRank.get(b) ?? 1_000) || a.localeCompare(b);
+  const recorded = (session.slotOrder ?? []).filter((id) => session.slots[id]);
+  if (recorded.length) {
+    const seen = new Set(recorded);
+    const rest = ids.filter((id) => !seen.has(id)).sort(byPlan);
+    return [...recorded, ...rest].map((id) => [id, session.slots[id]]);
+  }
+  const performed = ids.filter((id) => slotHasWork(session.slots[id]));
+  const finished = performed.length > 0 && performed.every((id) => session.slots[id].completion?.completedAt);
+  const sorted = finished
+    ? [...ids].sort((a, b) => {
+      const aTime = session.slots[a].completion?.completedAt;
+      const bTime = session.slots[b].completion?.completedAt;
+      if (aTime && bTime) return aTime.localeCompare(bTime) || byPlan(a, b);
+      if (aTime) return -1;
+      if (bTime) return 1;
+      return byPlan(a, b);
+    })
+    : [...ids].sort(byPlan);
+  return sorted.map((id) => [id, session.slots[id]]);
 }
 
 export function extraShown(log: Pick<SlotLog, ExtraKind | 'showWarmup' | 'showUpper' | 'showLower'>, kind: ExtraKind, barbell = false) {
@@ -173,15 +207,15 @@ function settlePause(session: Session, now: string) {
   delete session.pausedAt;
 }
 
-function checkSelection(data: TrainingData, date: string, exerciseId: string, variant: string, workout: Plan) {
-  const exercise = programmeExercises(data, [workout, ...weekPlans(data, date)]).find((item) => item.id === exerciseId);
+function checkSelection(data: TrainingData, date: string, exerciseId: string, variant: string, workout: Plan, prescription?: ProgrammeSnapshot | null) {
+  const exercise = programmeExercises(data, [workout, ...weekPlans(data, date, undefined, prescription)]).find((item) => item.id === exerciseId);
   if (!exercise || (variant && !exercise.variants?.includes(variant) && !exerciseOptions(exercise.id).includes(canonicalVariant(exercise.id, variant)))) {
     throw new TrainingValidationError('Choose an exercise and equipment from the programme.');
   }
   return exercise;
 }
 
-export function applyCommand(data: TrainingData, command: Command, now: string) {
+export function applyCommand(data: TrainingData, command: Command, now: string, prescription?: ProgrammeSnapshot | null) {
   if ('date' in command && command.type !== 'syncSteps') data.startedOn ??= mondayOf(command.date);
   switch (command.type) {
     case 'programmeStart':
@@ -207,6 +241,15 @@ export function applyCommand(data: TrainingData, command: Command, now: string) 
     case 'habits':
       data.habits[command.date] = command.data;
       return;
+    case 'dayNote': {
+      const note = command.text.trim();
+      const notes = data.dayNotes ?? {};
+      if (note) notes[command.date] = note;
+      else delete notes[command.date];
+      if (Object.keys(notes).length) data.dayNotes = notes;
+      else delete data.dayNotes;
+      return;
+    }
     case 'patchHabits':
       data.habits[command.date] = { ...emptyHabits, ...data.habits[command.date], ...command.data };
       return;
@@ -243,7 +286,7 @@ export function applyCommand(data: TrainingData, command: Command, now: string) 
     }
   }
 
-  const plan = workoutPlan(data, command.date, command.planId);
+  const plan = workoutPlan(data, command.date, command.planId, prescription);
   if (!plan) throw new TrainingValidationError('This workout is not in the programme.');
   const sessionId = sessionKey(command.date, plan.id);
   if (command.type === 'discard') {
@@ -267,10 +310,13 @@ export function applyCommand(data: TrainingData, command: Command, now: string) 
     delete existing.pausedMs;
     if (command.type === 'resetClock' && existing.pausedAt) existing.pausedAt = now;
     else delete existing.pausedAt;
-    if (command.type === 'restart') existing.slots = {};
+    if (command.type === 'restart') {
+      existing.slots = {};
+      delete existing.slotOrder;
+    }
     return;
   }
-  const active = data.sessions[sessionId] ??= { date: command.date, planId: plan.id, plan, startedAt: now, slots: {} };
+  const active = data.sessions[sessionId] ??= { date: command.date, planId: plan.id, plan: structuredClone(plan), startedAt: now, slots: {} };
   if (command.type === 'finish') {
     if (!Object.values(active.slots).some((item) => Object.keys(item.sets).length)) {
       throw new TrainingValidationError('Log a set before finishing this workout.');
@@ -282,11 +328,12 @@ export function applyCommand(data: TrainingData, command: Command, now: string) 
 
   const original = plan.exercises.find((item) => item.id === command.slotId);
   if (!original) throw new TrainingValidationError('This exercise is not in the workout.');
-  const log = active.slots[original.id] ??= effectiveSlot(data, command.date, plan.id, original);
+  const slotExercise = original;
+  const log = active.slots[slotExercise.id] ??= effectiveSlot(data, command.date, plan.id, slotExercise);
   const loggedOn = command.date;
   const loggedPlan = plan;
   function loggedSet(set: z.infer<typeof setSchema>, previous: { exerciseId: string; variant: string }) {
-    const selection = checkSelection(data, loggedOn, set.exerciseId, set.variant, loggedPlan);
+    const selection = checkSelection(data, loggedOn, set.exerciseId, set.variant, loggedPlan, prescription);
     if (previous.exerciseId !== set.exerciseId || previous.variant !== set.variant) {
       throw new TrainingValidationError('The exercise selection changed. Reopen this set.');
     }
@@ -295,6 +342,10 @@ export function applyCommand(data: TrainingData, command: Command, now: string) 
       throw new TrainingValidationError('Enter the reps or duration you completed.');
     }
     return { ...set, exerciseName: selection.name, perSide: selection.perSide };
+  }
+  function rememberSlot() {
+    if (active.slotOrder?.includes(slotExercise.id)) return;
+    active.slotOrder = [...(active.slotOrder ?? []), slotExercise.id];
   }
 
   switch (command.type) {
@@ -305,10 +356,12 @@ export function applyCommand(data: TrainingData, command: Command, now: string) 
         break;
       }
       log[kind] = loggedSet(command.set, log[kind] ?? log);
+      rememberSlot();
       break;
     }
     case 'putSet':
       log.sets[command.index] = loggedSet(command.set, log.sets[command.index] ?? log);
+      rememberSlot();
       break;
     case 'addSet':
       if (command.kind) showExtra(log, command.kind, true);
@@ -354,7 +407,7 @@ export function applyCommand(data: TrainingData, command: Command, now: string) 
       log.completion = { completedAt: log.completion?.completedAt ?? now, rir: command.rir };
       break;
     case 'substitute':
-      checkSelection(data, command.date, command.exerciseId, command.variant, plan);
+      checkSelection(data, command.date, command.exerciseId, command.variant, plan, prescription);
       if (command.recurring) {
         if (command.exerciseId !== original.id || !exerciseOptions(original.id).includes(command.variant)) {
           throw new TrainingValidationError('Choose a recurring option from this exercise.');

@@ -4,9 +4,11 @@ import { useRouter } from 'next/navigation';
 import { useEffect, useState } from 'react';
 import { CheckIns } from './check-ins';
 import { Habits } from './habits';
+import { ProgrammeEditor } from './programme';
 import { Today } from './today';
 import { Workout } from './workout';
 import { scheduledProgrammeDay, todayKey } from '@/lib/insights';
+import { habitGoals, type ProgrammeSnapshot } from '@/lib/prescription';
 import { type Command, type TrainingData, type TrainingSnapshot } from '@/lib/model';
 import { weekPlans } from '@/lib/weeks';
 import { docUrl, type DocTarget } from '@/lib/coach-doc';
@@ -20,10 +22,10 @@ function tabFromHash(): Tab {
   return tabs.find((tab) => `#${tab.id}` === window.location.hash)?.id ?? 'today';
 }
 
-function workoutFor(date: string, data: TrainingData) {
+function workoutFor(date: string, data: TrainingData, programme: ProgrammeSnapshot) {
   const active = Object.values(data.sessions).filter((session) => session.date === date && !session.finishedAt)
     .sort((a, b) => b.startedAt.localeCompare(a.startedAt))[0];
-  return active?.planId ?? weekPlans(data, date).find((plan) => plan.day === scheduledProgrammeDay(date, data))?.id ?? '';
+  return active?.planId ?? weekPlans(data, date, undefined, programme).find((plan) => plan.day === scheduledProgrammeDay(date, data))?.id ?? '';
 }
 
 async function post(path: string, body: unknown) {
@@ -33,13 +35,15 @@ async function post(path: string, body: unknown) {
   return result;
 }
 
-export function TrainingApp({ initial, today: initialToday, configuredDoc, docsReady, firstName }: {
-  initial: TrainingSnapshot; today: string; configuredDoc?: DocTarget; docsReady: boolean;
+export function TrainingApp({ initial, programme: initialProgramme, today: initialToday, configuredDoc, docsReady, firstName }: {
+  initial: TrainingSnapshot; programme: ProgrammeSnapshot; today: string; configuredDoc?: DocTarget; docsReady: boolean;
   firstName: string;
 }) {
   const router = useRouter();
   const [savedSnapshot, setSavedSnapshot] = useState<TrainingSnapshot>();
+  const [savedProgramme, setSavedProgramme] = useState<ProgrammeSnapshot>();
   const snapshot = savedSnapshot && savedSnapshot.revision > initial.revision ? savedSnapshot : initial;
+  const programme = savedProgramme && savedProgramme.revision > initialProgramme.revision ? savedProgramme : initialProgramme;
   const [tab, setTab] = useState<Tab>('today');
   const [today, setToday] = useState(initialToday);
   const [workout, setWorkout] = useState<WorkoutSelection>();
@@ -48,7 +52,7 @@ export function TrainingApp({ initial, today: initialToday, configuredDoc, docsR
   const data = snapshot.data;
   const fixedWorkoutDate = workout?.date;
   const workoutDate = fixedWorkoutDate ?? today;
-  const planId = workout?.planId ?? workoutFor(workoutDate, data);
+  const planId = workout?.planId ?? workoutFor(workoutDate, data, programme);
   const source = data.docs?.programme ?? configuredDoc;
   const sourceKey = source ? docUrl(source) : '';
 
@@ -116,6 +120,10 @@ export function TrainingApp({ initial, today: initialToday, configuredDoc, docsR
   }
 
   const mutate: Mutate = (command) => request('/api/training', command);
+  const saveProgramme = async (body: unknown) => {
+    const saved: ProgrammeSnapshot = await post('/api/programme', body);
+    setSavedProgramme((current) => !current || saved.revision >= current.revision ? saved : current);
+  };
 
   function navigate(to: Tab, selected?: WorkoutSelection) {
     setTab(to);
@@ -148,15 +156,16 @@ export function TrainingApp({ initial, today: initialToday, configuredDoc, docsR
 
   return <PageGradient className={tab === 'today' ? 'page-today' : ''}>
     <main id="main-content">
-      {tab === 'today' && <Today key={`${today}:${data.startedOn}`} today={today} data={data} firstName={firstName} openWorkout={openWorkout}
+      {tab === 'today' && <Today key={`${today}:${data.startedOn}`} today={today} data={data} programme={programme} firstName={firstName} openWorkout={openWorkout}
         openCheckIn={() => navigate('check-ins')} />}
-      {tab === 'train' && <Workout key={`${workoutDate}:${planId}`} date={workoutDate} today={today} planId={planId} data={data}
+      {tab === 'train' && <Workout key={`${workoutDate}:${planId}`} date={workoutDate} today={today} planId={planId} data={data} programme={programme}
         onOpen={pinWorkout} onLogToday={(id) => openWorkout(id, today)}
         onPlan={(id) => selectWorkout({ ...workout, planId: id, date: fixedWorkoutDate })}
         mutate={mutate} onBack={() => navigate('today')} onPreview={openWorkout} setFocused={setFocused} />}
-      {tab === 'habits' && <Habits key={today} date={today} log={data.habits[today]} mutate={mutate} />}
-      {tab === 'check-ins' && <CheckIns key={today} date={today} data={data} mutate={mutate}
+      {tab === 'habits' && <Habits key={today} date={today} log={data.habits[today]} goals={habitGoals(programme.state, today)} mutate={mutate} />}
+      {tab === 'check-ins' && <CheckIns key={today} date={today} data={data} mutate={mutate} goalsFor={(day) => habitGoals(programme.state, day)}
         destination={data.docs?.checkIns ?? configuredDoc} setFocused={setFocused} />}
+      {tab === 'programme' && <ProgrammeEditor today={today} data={data} programme={programme} onSave={saveProgramme} />}
     </main>
     {!focused && <FloatingNav tab={tab} onNavigate={(to) => {
       if (to === tab) { window.scrollTo(0, 0); return; }

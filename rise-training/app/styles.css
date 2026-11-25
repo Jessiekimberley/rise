@@ -415,7 +415,9 @@ button.pill, a.pill { min-height: var(--tap-min); }
 .screen-cues .heading-sentence { margin-top: 6px; }
 .cues-content { display: grid; gap: 10px; }
 .cues-block { padding: 14px 20px; border-radius: var(--radius-row); background: var(--color-surface); }
-.cues-block ul { display: grid; gap: 8px; margin-top: 8px; list-style: none; padding: 0; }
+.cues-block ul, .cues-block p { display: grid; gap: 8px; margin-top: 8px; }
+.cues-block ul { list-style: none; padding: 0; }
+.cues-block p { white-space: pre-wrap; }
 .cues-block li { display: flex; gap: 12px; }
 .cues-block li::before { content: ''; width: 6px; height: 6px; border-radius: 50%; margin-top: 8px; flex: none; background: var(--color-accent); }
 .note-field { display: grid; gap: 7px; }
@@ -579,6 +581,10 @@ button.pill, a.pill { min-height: var(--tap-min); }
 .log-table tbody tr:last-child th, .log-table tbody tr:last-child td { border-bottom: 0; }
 .log-notes { display: grid; gap: 4px; margin-top: 8px; padding-inline: 4px; font-size: 13px; line-height: 1.4; color: var(--color-ink-soft); }
 .log-notes p { white-space: pre-wrap; overflow-wrap: anywhere; }
+.log-day-empty { margin: 2px 4px 0; }
+.log-day-note { display: grid; justify-items: start; gap: 8px; margin-top: 12px; }
+.log-day-note .habit-note-input { width: 100%; }
+.log-day-note-actions { display: flex; flex-wrap: wrap; gap: 8px; }
 .doc-preview .log-empty { max-height: none; overflow: visible; }
 .export-days { display: grid; gap: 4px; }
 .export-day {
@@ -590,6 +596,32 @@ button.pill, a.pill { min-height: var(--tap-min); }
 .export-day-name { font-size: 15px; font-weight: 600; }
 .export-day-detail { font-size: 13px; color: var(--color-ink-muted); }
 .primary-button.danger-quiet { background: transparent; color: var(--color-error); }
+
+.screen-programme { gap: 12px; }
+.programme-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+.programme-grid .span-2 { grid-column: 1 / -1; }
+.programme-check { display: flex; align-items: center; gap: 10px; min-height: var(--tap-min); font-weight: 600; }
+.programme-check input { width: 22px; height: 22px; margin: 0; accent-color: var(--color-ink); }
+.programme-days { display: grid; gap: 4px; }
+.programme-day, .programme-exercise, .programme-history, .coach-thread li { border-radius: var(--radius-row); background: var(--color-surface); }
+.programme-day-body { display: grid; gap: 10px; padding: 0 12px 14px; }
+.programme-day-toggle, .programme-exercise-toggle { border: 0; background: transparent; color: inherit; text-align: left; }
+.programme-day-toggle { display: grid; grid-template-columns: auto 1fr; column-gap: 8px; width: 100%; min-height: 64px; padding: 10px 16px; }
+.programme-day-toggle span, .programme-exercise-toggle small, .programme-history summary small { color: var(--color-ink-muted); font-size: var(--text-label); }
+.programme-day-toggle strong { font-size: var(--text-value); font-weight: 500; }
+.programme-day-toggle small { grid-column: 2; }
+.programme-exercise-head { display: flex; align-items: center; gap: 8px; padding: 4px 8px 4px 12px; }
+.programme-exercise-toggle { display: grid; flex: 1; min-width: 0; min-height: var(--tap-min); }
+.programme-exercise-toggle span { font-size: 16px; font-weight: 500; }
+.programme-actions { display: flex; flex-wrap: wrap; gap: 8px; }
+.programme-review, .programme-history { padding: 0 16px 12px; background: var(--color-surface); border-radius: var(--radius-row); }
+.programme-review summary, .programme-history summary { display: grid; align-content: center; min-height: var(--tap-min); }
+.programme-review ul, .programme-history ul { display: grid; gap: 6px; margin: 0 0 8px; padding-left: 18px; }
+.coach-thread { display: grid; gap: 4px; margin: 0; padding: 0; list-style: none; }
+.coach-thread li { display: grid; gap: 4px; padding: 12px 16px; }
+.coach-thread li span { font-size: var(--text-label); color: var(--color-ink-muted); }
+.coach-thread li p { white-space: pre-wrap; overflow-wrap: anywhere; }
+.coach-thread li[data-author="brenna"] { background: var(--color-peach-tint); }
 
 .settings-sheet form { display: flex; flex-wrap: wrap; gap: 8px; align-items: end; }
 .settings-sheet form label { flex: 1 1 160px; min-width: 0; }

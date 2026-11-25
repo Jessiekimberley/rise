@@ -4,6 +4,7 @@ import { ChevronLeft, ChevronRight, MessageSquare } from 'lucide-react';
 import { useState } from 'react';
 import { addDays, displayDate, scheduledProgrammeDay, weekStart } from '@/lib/insights';
 import { sessionKey, type TrainingData } from '@/lib/model';
+import { revisionCovering, type ProgrammeSnapshot } from '@/lib/prescription';
 import { dayKind, dayTitle, programmeDays } from '@/lib/programme';
 import { availableWeek, weekPlans, workoutPlan } from '@/lib/weeks';
 import { WeeklyCheckInLink } from './weekly-check-in';
@@ -33,14 +34,19 @@ function mixPhotos(weekOf: string) {
 const compactName = (name: string) => /^[A-Z]{2,}$/.test(name)
   ? name : name.replace(/^Forearm /i, '').replace(/ (with dumbbells|on cable)$/i, '').toLowerCase();
 
-export function Today({ today, data, firstName, openWorkout, openCheckIn }: {
-  today: string; data: TrainingData; firstName: string;
+function dayOn(programme: ProgrammeSnapshot, data: TrainingData, date: string) {
+  return revisionCovering(programme.state, date)?.days[scheduledProgrammeDay(date, data) - 1] ?? programmeDays[scheduledProgrammeDay(date, data) - 1];
+}
+
+export function Today({ today, data, programme, firstName, openWorkout, openCheckIn }: {
+  today: string; data: TrainingData; programme: ProgrammeSnapshot; firstName: string;
   openWorkout: (id: string, date: string) => void; openCheckIn: () => void;
 }) {
   const [previewDate, setPreviewDate] = useState(today);
   const [weekOf, setWeekOf] = useState(() => weekStart(today));
   const dates = programmeDays.map((_, index) => addDays(weekOf, index));
   const day = scheduledProgrammeDay(previewDate, data);
+  const revision = revisionCovering(programme.state, previewDate);
   const current = previewDate === today;
   const future = previewDate > today;
   const thisWeek = weekStart(today);
@@ -48,10 +54,10 @@ export function Today({ today, data, firstName, openWorkout, openCheckIn }: {
   const currentWeek = weekOf === thisWeek;
   const viewingNext = weekOf === nextWeek;
   const weekday = displayDate(previewDate, { weekday: 'long' });
-  const definition = programmeDays[day - 1];
+  const definition = dayOn(programme, data, previewDate);
   const kind = dayKind(definition.type);
-  const programme = weekPlans(data, previewDate);
-  const plan = programme.find((item) => item.day === day);
+  const plans = weekPlans(data, previewDate, undefined, programme);
+  const plan = plans.find((item) => item.day === day);
   const session = plan && data.sessions[sessionKey(previewDate, plan.id)];
   const latest = Object.values(data.sessions).sort((a, b) => b.startedAt.localeCompare(a.startedAt))[0];
   const resume = latest && !latest.finishedAt && latest !== session ? latest : undefined;
@@ -96,10 +102,10 @@ export function Today({ today, data, firstName, openWorkout, openCheckIn }: {
           <span>{weekLabel}</span>
           <RoundButton className="round-muted" aria-label="Next week" onClick={() => shiftWeek(7)} disabled={viewingNext}><ChevronRight size={18} /></RoundButton>
         </div>
-        <div className="week-caption"><span>Tap a day</span><strong>{completed.size} of {programme.length} strength</strong></div>
+        <div className="week-caption"><span>Tap a day</span><strong>{completed.size} of {plans.length} strength</strong></div>
         <ChipGroup label="Day of the week" className="week-strip" value={previewDate} onChange={setPreviewDate}
           options={dates.map((dayDate) => {
-            const item = programmeDays[scheduledProgrammeDay(dayDate, data) - 1];
+            const item = dayOn(programme, data, dayDate);
             const itemKind = dayKind(item.type);
             const name = displayDate(dayDate, { weekday: 'long' });
             const logged = Object.values(data.sessions).some((entry) => entry.date === dayDate && entry.finishedAt);
@@ -112,7 +118,9 @@ export function Today({ today, data, firstName, openWorkout, openCheckIn }: {
           })} />
       </section>
     </div>
-    {!!coachWeek?.notes?.length && <details className="disclosure"><summary>Brenna’s notes · Week {coachWeek.number}</summary>{coachWeek.notes.map((note, index) => <p key={index}>{note}</p>)}</details>}
+    {revision?.deload && <p className="fine">Deload week.</p>}
+    {revision?.weekNote ? <details className="disclosure"><summary>Programme note</summary><p>{revision.weekNote}</p></details>
+      : !!coachWeek?.notes?.length && <details className="disclosure"><summary>Brenna’s notes · Week {coachWeek.number}</summary>{coachWeek.notes.map((note, index) => <p key={index}>{note}</p>)}</details>}
     <div className="screen-actions">
       {plan && <PrimaryButton onClick={open}>{action}</PrimaryButton>}
       <WeeklyCheckInLink />

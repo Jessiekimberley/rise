@@ -159,6 +159,7 @@ test('an open workout clock can be reset, and a restart clears its sets', () => 
   assert.equal(data.sessions[key].startedAt, later);
   assert.equal(data.sessions[key].pausedAt, undefined);
   assert.equal(data.sessions[key].pausedMs, undefined);
+  assert.equal(data.sessions[key].slotOrder, undefined);
   assert.deepEqual(data.sessions[key].slots, {});
 
   applyCommand(data, { type: 'putSet', ...session, slotId: 'leg-press', index: 0, set }, later);
@@ -256,6 +257,45 @@ test('logged habits sit on the day’s record and under that day’s workout not
 
   applyCommand(data, { type: 'patchHabits', date, data: { steps: null, waterHitTarget: null, sleep: null, sleepNote: null, fuellingNote: null } }, now);
   assert.doesNotMatch(buildReport(data, 'weekly', date, date).text, /Habits/);
+});
+
+test('check-in lists exercises in the order they were logged, and a day can carry a note', () => {
+  const date = '2026-11-25';
+  const now = `${date}T01:00:00Z`;
+  const data = createData();
+  const session = { date, planId: 'lower-1' };
+  const key = sessionKey(date, session.planId);
+  const set = (exerciseId: string): SetLog => ({ exerciseId, variant: '', weight: 40, reps: 8, seconds: null, effort: null });
+  applyCommand(data, { type: 'putSet', ...session, slotId: 'rdl', index: 0, set: set('rdl') }, `${date}T01:00:00Z`);
+  applyCommand(data, { type: 'putSet', ...session, slotId: 'leg-press', index: 0, set: set('leg-press') }, `${date}T01:10:00Z`);
+  assert.deepEqual(data.sessions[key].slotOrder, ['rdl', 'leg-press']);
+  const names = () => buildReport(data, 'weekly', date, date).days[0].sets.map((row) => row.exercise);
+  assert.deepEqual(names(), ['RDL', 'Leg Press']);
+
+  const slots = data.sessions[key].slots;
+  data.sessions[key].slots = { 'leg-press': slots['leg-press'], rdl: slots.rdl };
+  assert.deepEqual(names(), ['RDL', 'Leg Press']);
+
+  delete data.sessions[key].slotOrder;
+  assert.deepEqual(names(), ['Leg Press', 'RDL']);
+
+  data.sessions[key].slots.rdl.completion = { completedAt: `${date}T01:05:00Z`, rir: 2 };
+  data.sessions[key].slots['leg-press'].completion = { completedAt: `${date}T01:20:00Z`, rir: 2 };
+  assert.deepEqual(names(), ['RDL', 'Leg Press']);
+
+  assert.equal(commandSchema.safeParse({ type: 'dayNote', date, text: 'Knee felt good.' }).success, true);
+  applyCommand(data, { type: 'dayNote', date, text: '  Knee felt good.\nEasy session. ' }, now);
+  const report = buildReport(data, 'weekly', date, date);
+  assert.equal(report.days[0].dayNote, 'Knee felt good.\nEasy session.');
+  assert.match(report.text, /Notes: Knee felt good\.\nEasy session\./);
+  applyCommand(data, { type: 'dayNote', date, text: '   ' }, now);
+  assert.equal(data.dayNotes, undefined);
+  assert.equal(buildReport(data, 'weekly', date, date).days[0].dayNote, undefined);
+
+  applyCommand(data, { type: 'dayNote', date: '2026-11-26', text: 'Rest day walk.' }, now);
+  const rest = buildReport(data, 'weekly', '2026-11-26', '2026-11-26');
+  assert.equal(rest.days[0]?.dayNote, 'Rest day walk.');
+  assert.match(rest.text, /Thursday, 26 Nov\nNotes: Rest day walk\./);
 });
 
 test('workout, concurrent set saves, habits and coach report survive a database restart', async () => {

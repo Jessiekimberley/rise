@@ -332,8 +332,9 @@ export function LogSet({ rows, active, exerciseNumber, exerciseCount, workSetCou
         <button type="button" className="logger-pill" onClick={cues} disabled={locked}><Play size={16} strokeWidth={1.8} aria-hidden="true" />Cues</button>
       </div>
       {plates ? <PlateCalculator name={name} weight={kg} /> : <section className="logger-card logger-target" aria-label="Brenna’s target">
-        <strong>Brenna’s target · {workSetCount} × {exercise.target.replace(/ reps\b/, '')} · {weightLabel(exercise)}</strong>
+        <strong>Brenna’s target · {exercise.warmupSets ? `${exercise.warmupSets} warm-up · ` : ''}{workSetCount} × {exercise.target.replace(/ reps\b/, '')} · {weightLabel(exercise)}{exercise.rirTarget != null ? ` · RIR ${exercise.rirTarget >= 3 ? '3+' : exercise.rirTarget}` : exercise.rpeTarget != null ? ` · RPE ${exercise.rpeTarget}` : ''}</strong>
         {exercise.cue && <p>{exercise.cue}</p>}
+        {exercise.progression && <p>Progression · {exercise.progression}</p>}
         <div className="logger-trends">
           <span>vs last time</span>
           <Trend label={timed ? 'Seconds' : 'Reps'} value={count} previous={timed ? last?.seconds : last?.reps} />
