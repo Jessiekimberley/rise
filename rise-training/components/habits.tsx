@@ -7,8 +7,8 @@ import { HeadingSentence, Row, RowStack } from './ui';
 
 const format = new Intl.NumberFormat('en-NZ');
 const range = ({ min, max }: { min: number; max: number }) => `${format.format(min)}–${format.format(max)}`;
-const restDay = programmeDays.find((day) => day.type === 'active-rest' && 'guidance' in day);
-const guidance = restDay && 'guidance' in restDay ? restDay.guidance : [];
+const restDay = programmeDays.find((day) => day.type === 'active-rest');
+const guidance = restDay?.guidance ?? [];
 const recovery = guidance[1];
 const planning = guidance[2];
 

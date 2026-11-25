@@ -9,7 +9,27 @@ import { availableWeek, weekPlans, workoutPlan } from '@/lib/weeks';
 import { WeeklyCheckInLink } from './weekly-check-in';
 import { ChipGroup, HeadingSentence, PhotoHero, Pill, PrimaryButton, RoundButton } from './ui';
 
-const photos = ['glass', 'shoulder', 'swim', 'liquid', 'blur', 'thermal', 'night'];
+type DayPhoto = { src: string; position?: string };
+const originals: DayPhoto[] = ['glass', 'shoulder', 'swim', 'liquid', 'blur', 'thermal', 'night'].map((name) => ({ src: `${name}.webp` }));
+const added: DayPhoto[] = [
+  { src: 'track.webp', position: '28% 48%' },
+  { src: 'linen.webp', position: '50% 40%' },
+  { src: 'studio.webp', position: '64% 46%' },
+  { src: 'field.jpg', position: '48% 36%' },
+];
+
+function mixPhotos(weekOf: string) {
+  let state = [...weekOf].reduce((sum, char) => (Math.imul(sum, 33) + char.charCodeAt(0)) >>> 0, 7);
+  const next = () => {
+    state = (Math.imul(state, 1664525) + 1013904223) >>> 0;
+    return state / 4294967296;
+  };
+  const draw = (items: DayPhoto[], count: number) => {
+    const pool = [...items];
+    return Array.from({ length: count }, () => pool.splice(Math.floor(next() * pool.length), 1)[0]);
+  };
+  return draw([...draw(added, 3), ...draw(originals, 4)], 7);
+}
 const compactName = (name: string) => /^[A-Z]{2,}$/.test(name)
   ? name : name.replace(/^Forearm /i, '').replace(/ (with dumbbells|on cable)$/i, '').toLowerCase();
 
@@ -49,6 +69,7 @@ export function Today({ today, data, firstName, openWorkout, openCheckIn }: {
     setPreviewDate(addDays(previewDate, days));
   }
   const when = current ? 'Today' : currentWeek ? weekday : displayDate(previewDate, { weekday: 'short', day: 'numeric', month: 'short' });
+  const photo = mixPhotos(weekOf)[Math.max(0, dates.indexOf(previewDate))];
   const action = session?.finishedAt ? 'View session' : session ? 'Resume workout' : future ? 'Preview session' : current ? 'View workout' : 'Log this day';
   const weekLabel = currentWeek
     ? 'This week'
@@ -60,7 +81,7 @@ export function Today({ today, data, firstName, openWorkout, openCheckIn }: {
       <RoundButton aria-label="Send this week's log" onClick={openCheckIn}><MessageSquare size={20} /></RoundButton>
     </div>
     <HeadingSentence className="heading-small" lead={current ? `Hi, ${firstName}.` : future ? `${weekday} preview.` : `${weekday} ${displayDate(previewDate)}.`} follow={summary} />
-    <PhotoHero src={`/images/days/${photos[day - 1]}.webp`} title={title} label={`${when} · Day ${day}`} onClick={open} />
+    <PhotoHero src={`/images/days/${photo.src}`} position={photo.position} title={title} label={`${when} · Day ${day}`} onClick={open} />
     {resume && resumePlan && <Pill className="pill-white" onClick={() => openWorkout(resume.planId, resume.date)}>
       Resume {dayTitle(resumePlan)} · {displayDate(resume.date)}
     </Pill>}
