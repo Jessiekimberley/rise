@@ -17,7 +17,9 @@ export default async function Home() {
     ? { documentId: process.env.GOOGLE_DOC_ID, tabId: process.env.GOOGLE_DOC_TAB_ID || 't.0' }
     : undefined;
   const sharedProgramme = await productionProgramme().load(ownerId);
+  const parts = programme.client.name.trim().split(/\s+/).filter(Boolean);
+  const initials = ((parts[0]?.[0] ?? '') + (parts.length > 1 ? parts[parts.length - 1]?.[0] ?? '' : '')).toUpperCase();
   return <TrainingApp initial={trainingLogView(snapshot, true)} programme={sharedProgramme} today={today} configuredDoc={configuredDoc}
     docsReady={Boolean(process.env.GOOGLE_SERVICE_ACCOUNT_JSON)}
-    firstName={programme.client.name.split(' ')[0]} />;
+    initials={initials} />;
 }

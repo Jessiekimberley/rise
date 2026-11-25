@@ -1,14 +1,14 @@
 'use client';
 
-import { ChevronLeft } from 'lucide-react';
-import { useEffect, useRef, useState } from 'react';
+import Image from 'next/image';
+import { useEffect, useRef, useState, type PointerEvent as ReactPointerEvent } from 'react';
 import { restDisplay } from '@/lib/insights';
 import { scheduleRestChime } from '@/lib/rest-audio';
 
 export type RestDetails = {
   seconds: number;
   startedAt: number;
-  title: string;
+  logged?: string;
   upcoming?: string;
   next?: string;
   last?: string;
@@ -36,83 +36,166 @@ export function useRestAudio() {
       try { voices.current = scheduleRestChime(audio.current, seconds); } catch { /* Audio is optional. */ }
     }
   }
-  return { prime, cancel, schedule };
-}
-
-const radius = 124;
-const circumference = 2 * Math.PI * radius;
-const step = 15;
-
-export function RestTimer({ details, audio, close }: { details: RestDetails; audio: ReturnType<typeof useRestAudio>; close: () => void }) {
-  const dialog = useRef<HTMLDialogElement>(null);
-  const deadline = useRef(details.startedAt + details.seconds * 1_000);
-  const [seconds, setSeconds] = useState(details.seconds);
-  const [total, setTotal] = useState(details.seconds);
-  const notified = useRef(false);
-
-  function update() {
-    const remaining = Math.max(0, Math.ceil((deadline.current - Date.now()) / 1_000));
-    setSeconds(remaining);
-    if (remaining === 0 && !notified.current) {
-      notified.current = true;
-      navigator.vibrate?.(200);
+  function chime() {
+    cancel();
+    prime();
+    if (audio.current) {
+      try { voices.current = scheduleRestChime(audio.current, 0); } catch { /* Audio is optional. */ }
     }
   }
+  return { prime, cancel, schedule, chime };
+}
+
+const radius = 90;
+const circumference = 2 * Math.PI * radius;
+const miniRadius = 19;
+const miniCircumference = 2 * Math.PI * miniRadius;
+const step = 15;
+
+export function RestTimer({ details, audio, close, onMini }: {
+  details: RestDetails; audio: ReturnType<typeof useRestAudio>; close: () => void; onMini?: (mini: boolean) => void;
+}) {
+  const deadline = useRef(details.startedAt + details.seconds * 1_000);
+  const audioRef = useRef(audio);
+  const notified = useRef(false);
+  const collapseTimer = useRef<number>(undefined);
+  const sheet = useRef<HTMLElement>(null);
+  const drag = useRef<{ y: number; offset: number; handle: boolean } | null>(null);
+  const [seconds, setSeconds] = useState(() => Math.max(0, Math.ceil((deadline.current - Date.now()) / 1_000)));
+  const [total, setTotal] = useState(details.seconds);
+  const [collapsed, setCollapsed] = useState(false);
+  const [offset, setOffset] = useState(0);
+  const [pulse, setPulse] = useState(false);
+  audioRef.current = audio;
+
+  function remainingNow() {
+    return Math.max(0, Math.ceil((deadline.current - Date.now()) / 1_000));
+  }
+
+  function finish() {
+    if (notified.current) return;
+    notified.current = true;
+    const vibrated = typeof navigator !== 'undefined' && typeof navigator.vibrate === 'function' && navigator.vibrate(200) === true;
+    if (vibrated) audioRef.current.cancel();
+    else audioRef.current.chime();
+    const reduce = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+    if (!vibrated && !reduce) setPulse(true);
+    window.clearTimeout(collapseTimer.current);
+    collapseTimer.current = window.setTimeout(() => {
+      setPulse(false);
+      setCollapsed(true);
+    }, reduce || vibrated ? 0 : 280);
+  }
+
+  useEffect(() => { onMini?.(collapsed); }, [collapsed, onMini]);
 
   useEffect(() => {
-    const element = dialog.current;
-    if (element && !element.open) element.showModal();
-    const tick = window.setInterval(update, 180);
+    function update() {
+      const remaining = remainingNow();
+      setSeconds(remaining);
+      if (remaining === 0) finish();
+    }
+    update();
+    const tick = window.setInterval(update, 200);
+    document.addEventListener('visibilitychange', update);
+    window.addEventListener('focus', update);
     return () => {
       window.clearInterval(tick);
-      element?.close();
+      window.clearTimeout(collapseTimer.current);
+      document.removeEventListener('visibilitychange', update);
+      window.removeEventListener('focus', update);
     };
   }, []);
 
+  useEffect(() => {
+    if (collapsed) return;
+    sheet.current?.focus();
+  }, [collapsed]);
+
   function adjust(amount: number) {
-    audio.prime();
+    audioRef.current.prime();
     const now = Date.now();
-    deadline.current = Math.max(now, deadline.current) + amount * 1_000;
-    const remaining = Math.max(0, Math.ceil((deadline.current - now) / 1_000));
+    deadline.current = Math.max(now, deadline.current + amount * 1_000);
+    const remaining = remainingNow();
     setTotal((current) => Math.max(current, remaining));
     if (remaining > 0) {
       notified.current = false;
-      audio.schedule(remaining);
-    } else audio.cancel();
+      window.clearTimeout(collapseTimer.current);
+      setPulse(false);
+      audioRef.current.schedule(remaining);
+    } else audioRef.current.cancel();
     setSeconds(remaining);
   }
 
-  const fraction = total > 0 ? Math.min(1, seconds / total) : 0;
+  function pointerDown(event: ReactPointerEvent<HTMLElement>) {
+    const target = event.target as HTMLElement;
+    const handle = Boolean(target.closest('.rest-handle'));
+    if (target.closest('button') && !handle) return;
+    drag.current = { y: event.clientY, offset: 0, handle };
+    event.currentTarget.setPointerCapture(event.pointerId);
+  }
 
-  return <dialog ref={dialog} className="rest-screen" aria-labelledby="rest-heading"
-    onCancel={(event) => { event.preventDefault(); close(); }}
-    onClick={(event) => { if (event.target === event.currentTarget) close(); }}>
-    <img className="rest-photo" src="/images/days/night.webp" alt="" />
+  function pointerMove(event: ReactPointerEvent<HTMLElement>) {
+    if (!drag.current) return;
+    const next = Math.max(0, event.clientY - drag.current.y);
+    drag.current.offset = next;
+    setOffset(next);
+  }
+
+  function pointerUp() {
+    const state = drag.current;
+    if (state && (state.offset > 72 || (state.handle && state.offset < 8))) setCollapsed(true);
+    drag.current = null;
+    setOffset(0);
+  }
+
+  const fraction = total > 0 ? Math.min(1, seconds / total) : 0;
+  const clock = restDisplay(seconds);
+
+  if (collapsed) return <div className="rest-mini" role="region" aria-label="Rest timer, minimised">
+    <button type="button" className="rest-mini-open" aria-label="Expand timer" onClick={() => setCollapsed(false)}>
+      <span className="rest-mini-ring" aria-hidden="true">
+        <svg viewBox="0 0 44 44">
+          <circle cx="22" cy="22" r={miniRadius} />
+          <circle cx="22" cy="22" r={miniRadius} strokeDasharray={miniCircumference} strokeDashoffset={miniCircumference * (1 - fraction)} />
+        </svg>
+      </span>
+      <span className="rest-mini-copy">
+        <span role="timer" aria-live="off">{clock}</span>
+        <span>Rest · tap to expand</span>
+      </span>
+    </button>
+    <button type="button" className="rest-mini-skip" onClick={close}>Skip</button>
+  </div>;
+
+  return <section ref={sheet} className="rest-sheet" role="dialog" aria-label="Rest timer" tabIndex={-1}
+    data-dragging={offset > 0 || undefined}
+    style={offset ? { transform: `translateY(${offset}px)` } : undefined}
+    onKeyDown={(event) => { if (event.key === 'Escape') { event.preventDefault(); setCollapsed(true); } }}
+    onPointerDown={pointerDown} onPointerMove={pointerMove} onPointerUp={pointerUp} onPointerCancel={pointerUp}>
+    <Image className="rest-photo" src="/images/workouts/w4-lower-night-water.webp" alt="" fill sizes="480px" />
     <span className="rest-scrim" aria-hidden="true" />
     <div className="rest-body">
-      <div className="rest-toolbar">
-        <button type="button" className="rest-back" aria-label="Back to sets" onClick={close}>
-          <ChevronLeft size={20} aria-hidden="true" />
-        </button>
-        <span>{details.title}</span>
+      <button type="button" className="rest-handle" aria-label="Minimise timer" onClick={() => setCollapsed(true)}>
         <span aria-hidden="true" />
+      </button>
+      <div className="rest-title">
+        <span>Rest.</span>
+        {details.logged && <span>{details.logged}</span>}
       </div>
-      <h2 id="rest-heading">Rest.</h2>
       <div className="rest-stage">
-        <div className="rest-ring">
-          <svg aria-hidden="true" viewBox="0 0 272 272">
-            <circle cx="136" cy="136" r={radius} />
-            <circle cx="136" cy="136" r={radius} strokeDasharray={circumference} strokeDashoffset={circumference * (1 - fraction)} />
+        <button type="button" aria-label="Subtract 15 seconds" onClick={() => adjust(-step)}>−15</button>
+        <div className="rest-ring" data-pulse={pulse || undefined}>
+          <svg aria-hidden="true" viewBox="0 0 196 196">
+            <circle cx="98" cy="98" r={radius} />
+            <circle cx="98" cy="98" r={radius} strokeDasharray={circumference} strokeDashoffset={circumference * (1 - fraction)} />
           </svg>
           <div className="rest-face">
-            <span role="timer" aria-live="off">{restDisplay(seconds)}</span>
-            <span>of {restDisplay(details.seconds)}</span>
+            <span role="timer" aria-live="off">{clock}</span>
+            <span>of {restDisplay(total)}</span>
           </div>
         </div>
-      </div>
-      <div className="rest-nudges">
-        <button type="button" onClick={() => adjust(-step)} disabled={seconds === 0}>−15 s</button>
-        <button type="button" onClick={() => adjust(step)}>+15 s</button>
+        <button type="button" aria-label="Add 15 seconds" onClick={() => adjust(step)}>+15</button>
       </div>
       <div className="rest-footer">
         {details.upcoming && <div className="rest-next">
@@ -122,9 +205,8 @@ export function RestTimer({ details, audio, close }: { details: RestDetails; aud
           </div>
           {details.last && <span className="rest-last">Last {details.last}</span>}
         </div>}
-        {seconds === 0 && <p className="rest-complete" role="status">Rest complete</p>}
-        <button type="button" className="rest-skip" onClick={close}>{seconds === 0 ? 'Continue' : 'Skip rest'}</button>
+        <button type="button" className="rest-skip" onClick={close}>Skip rest</button>
       </div>
     </div>
-  </dialog>;
+  </section>;
 }

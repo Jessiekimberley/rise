@@ -79,6 +79,41 @@ export function ordinal(value: number) {
   return `${value}${['th', 'st', 'nd', 'rd'][value % 10] ?? 'th'}`;
 }
 
+export function workoutsDoneThisWeek(data: TrainingData, today: string) {
+  const start = weekStart(today);
+  const end = addDays(start, 7);
+  const events: { workoutNumber: number; completedAt: string }[] = [];
+  const seen = new Set<string>();
+  function add(workoutNumber: number, completedAt: string) {
+    const day = todayKey(new Date(completedAt));
+    if (day < start || day >= end || workoutNumber < 1 || workoutNumber > 7) return;
+    const id = `${workoutNumber}:${completedAt}`;
+    if (seen.has(id)) return;
+    seen.add(id);
+    events.push({ workoutNumber, completedAt });
+  }
+  for (const item of data.completions ?? []) add(item.workoutNumber, item.completedAt);
+  for (const session of Object.values(data.sessions)) {
+    if (!session.finishedAt) continue;
+    const workoutNumber = session.plan?.day ?? findPlan(session.planId)?.day;
+    if (workoutNumber) add(workoutNumber, session.finishedAt);
+  }
+  const done = new Map<number, { weekday: string; weekdayLong: string }>();
+  for (const event of events.sort((a, b) => a.completedAt.localeCompare(b.completedAt))) {
+    if (done.has(event.workoutNumber)) continue;
+    const day = todayKey(new Date(event.completedAt));
+    done.set(event.workoutNumber, {
+      weekday: displayDate(day, { weekday: 'short' }),
+      weekdayLong: displayDate(day, { weekday: 'long' }),
+    });
+  }
+  let upNext: number | null = null;
+  for (let number = 1; number <= 7; number += 1) {
+    if (!done.has(number)) { upNext = number; break; }
+  }
+  return { done, count: done.size, upNext };
+}
+
 export function workoutsThisWeek(data: TrainingData, date: string) {
   const start = weekStart(date);
   const end = addDays(start, 6);

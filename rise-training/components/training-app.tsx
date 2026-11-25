@@ -35,9 +35,9 @@ async function post(path: string, body: unknown) {
   return result;
 }
 
-export function TrainingApp({ initial, programme: initialProgramme, today: initialToday, configuredDoc, docsReady, firstName }: {
+export function TrainingApp({ initial, programme: initialProgramme, today: initialToday, configuredDoc, docsReady, initials }: {
   initial: TrainingSnapshot; programme: ProgrammeSnapshot; today: string; configuredDoc?: DocTarget; docsReady: boolean;
-  firstName: string;
+  initials: string;
 }) {
   const router = useRouter();
   const [savedSnapshot, setSavedSnapshot] = useState<TrainingSnapshot>();
@@ -154,10 +154,10 @@ export function TrainingApp({ initial, programme: initialProgramme, today: initi
     return true;
   }
 
-  return <PageGradient className={tab === 'today' ? 'page-today' : ''}>
+  return <PageGradient className={[tab === 'today' && 'page-today', tab === 'programme' && 'page-wide'].filter(Boolean).join(' ')}>
     <main id="main-content">
-      {tab === 'today' && <Today key={`${today}:${data.startedOn}`} today={today} data={data} programme={programme} firstName={firstName} openWorkout={openWorkout}
-        openCheckIn={() => navigate('check-ins')} />}
+      {tab === 'today' && <Today key={`${today}:${data.startedOn}`} today={today} data={data} programme={programme} initials={initials} openWorkout={openWorkout}
+        openCheckIn={() => navigate('check-ins')} openHabits={() => navigate('habits')} mutate={mutate} />}
       {tab === 'train' && <Workout key={`${workoutDate}:${planId}`} date={workoutDate} today={today} planId={planId} data={data} programme={programme}
         onOpen={pinWorkout} onLogToday={(id) => openWorkout(id, today)}
         onPlan={(id) => selectWorkout({ ...workout, planId: id, date: fixedWorkoutDate })}

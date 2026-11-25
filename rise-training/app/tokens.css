@@ -25,6 +25,13 @@
   --gradient-hero: radial-gradient(95% 34% at 50% 30%, #F6CFB2 0%, rgba(246,207,178,0) 72%),
                    linear-gradient(180deg, #C9D6E8 0%, #E1E7F0 30%, #F2F2F0 58%, #F2F2F0 100%);
   --scrim-photo: linear-gradient(180deg, rgba(12,10,8,0) 30%, rgba(12,10,8,0.6) 100%);
+  --scrim-tile: linear-gradient(180deg, rgb(12 10 8 / .05) 30%, rgb(12 10 8 / .62) 100%);
+  --scrim-night: linear-gradient(180deg, rgb(18 22 21 / .55), rgb(18 22 21 / .85));
+  --color-night: #121615;
+  --gradient-home: radial-gradient(95% 26% at 50% 18%, var(--color-peach) 0%, transparent 72%),
+                   linear-gradient(180deg, var(--color-sky) 0%, var(--color-mist) 22%, var(--color-canvas) 46%, var(--color-canvas) 100%);
+  --shadow-rest: 0 -12px 40px rgb(12 14 13 / .25);
+  --shadow-rest-mini: 0 10px 30px rgb(12 14 13 / .3);
 
   /* Type */
   --font-serif: var(--font-newsreader), Georgia, serif;          /* headings only */

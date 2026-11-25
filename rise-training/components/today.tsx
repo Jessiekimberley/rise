@@ -1,129 +1,142 @@
 'use client';
 
-import { ChevronLeft, ChevronRight, MessageSquare } from 'lucide-react';
-import { useState } from 'react';
-import { addDays, displayDate, scheduledProgrammeDay, weekStart } from '@/lib/insights';
-import { sessionKey, type TrainingData } from '@/lib/model';
+import Image from 'next/image';
+import { MessageSquare } from 'lucide-react';
+import { useId, useState, type KeyboardEvent } from 'react';
+import { displayDate, workoutsDoneThisWeek } from '@/lib/insights';
+import { dayKind, programmeDays } from '@/lib/programme';
 import { revisionCovering, type ProgrammeSnapshot } from '@/lib/prescription';
-import { dayKind, dayTitle, programmeDays } from '@/lib/programme';
-import { availableWeek, weekPlans, workoutPlan } from '@/lib/weeks';
-import { WeeklyCheckInLink } from './weekly-check-in';
-import { ChipGroup, HeadingSentence, PhotoHero, Pill, PrimaryButton, RoundButton } from './ui';
+import type { TrainingData } from '@/lib/model';
+import { weekPlans } from '@/lib/weeks';
+import { BottomSheet, HeadingSentence, PrimaryButton, RoundButton } from './ui';
+import type { Mutate } from './training-app';
 
-type DayPhoto = { src: string; position?: string };
-const originals: DayPhoto[] = ['glass', 'shoulder', 'swim', 'liquid', 'blur', 'thermal', 'night'].map((name) => ({ src: `${name}.webp` }));
-const added: DayPhoto[] = [
-  { src: 'track.webp', position: '28% 48%' },
-  { src: 'linen.webp', position: '50% 40%' },
-  { src: 'studio.webp', position: '64% 46%' },
-  { src: 'field.jpg', position: '48% 36%' },
-];
+const workoutPhoto: Record<number, string> = {
+  1: '/images/workouts/w1-lower-glass.webp',
+  2: '/images/workouts/w2-upper-shoulder.webp',
+  3: '/images/workouts/w3-rest-swim.webp',
+  4: '/images/workouts/w4-lower-night-water.webp',
+  5: '/images/workouts/w5-upper-back.webp',
+  6: '/images/workouts/w6-cardio-thermal.webp',
+  7: '/images/workouts/w7-rest-blur.webp',
+};
 
-function mixPhotos(weekOf: string) {
-  let state = [...weekOf].reduce((sum, char) => (Math.imul(sum, 33) + char.charCodeAt(0)) >>> 0, 7);
-  const next = () => {
-    state = (Math.imul(state, 1664525) + 1013904223) >>> 0;
-    return state / 4294967296;
-  };
-  const draw = (items: DayPhoto[], count: number) => {
-    const pool = [...items];
-    return Array.from({ length: count }, () => pool.splice(Math.floor(next() * pool.length), 1)[0]);
-  };
-  return draw([...draw(added, 3), ...draw(originals, 4)], 7);
-}
-const compactName = (name: string) => /^[A-Z]{2,}$/.test(name)
-  ? name : name.replace(/^Forearm /i, '').replace(/ (with dumbbells|on cable)$/i, '').toLowerCase();
-
-function dayOn(programme: ProgrammeSnapshot, data: TrainingData, date: string) {
-  return revisionCovering(programme.state, date)?.days[scheduledProgrammeDay(date, data) - 1] ?? programmeDays[scheduledProgrammeDay(date, data) - 1];
+function homeDate(today: string) {
+  return displayDate(today, { weekday: 'long', day: 'numeric', month: 'long' }).replace(/,/g, '');
 }
 
-export function Today({ today, data, programme, firstName, openWorkout, openCheckIn }: {
-  today: string; data: TrainingData; programme: ProgrammeSnapshot; firstName: string;
-  openWorkout: (id: string, date: string) => void; openCheckIn: () => void;
+function startLabel(number: number, type: string, title: string) {
+  const kind = dayKind(type);
+  const detail = kind === 'cardio' ? 'cardio' : kind === 'rest' ? 'active rest' : title.toLowerCase();
+  return `Start Workout ${number} · ${detail}`;
+}
+
+export function Today({ today, data, programme, initials, openWorkout, openCheckIn, openHabits, mutate }: {
+  today: string; data: TrainingData; programme: ProgrammeSnapshot; initials: string;
+  openWorkout: (id: string, date: string) => void; openCheckIn: () => void; openHabits: () => void; mutate: Mutate;
 }) {
-  const [previewDate, setPreviewDate] = useState(today);
-  const [weekOf, setWeekOf] = useState(() => weekStart(today));
-  const dates = programmeDays.map((_, index) => addDays(weekOf, index));
-  const day = scheduledProgrammeDay(previewDate, data);
-  const revision = revisionCovering(programme.state, previewDate);
-  const current = previewDate === today;
-  const future = previewDate > today;
-  const thisWeek = weekStart(today);
-  const nextWeek = addDays(thisWeek, 7);
-  const currentWeek = weekOf === thisWeek;
-  const viewingNext = weekOf === nextWeek;
-  const weekday = displayDate(previewDate, { weekday: 'long' });
-  const definition = dayOn(programme, data, previewDate);
-  const kind = dayKind(definition.type);
-  const plans = weekPlans(data, previewDate, undefined, programme);
-  const plan = plans.find((item) => item.day === day);
-  const session = plan && data.sessions[sessionKey(previewDate, plan.id)];
-  const latest = Object.values(data.sessions).sort((a, b) => b.startedAt.localeCompare(a.startedAt))[0];
-  const resume = latest && !latest.finishedAt && latest !== session ? latest : undefined;
-  const resumePlan = resume && workoutPlan(data, resume.date, resume.planId);
-  const activePlan = session?.plan ?? plan;
-  const title = activePlan ? dayTitle(activePlan) : definition.title;
-  const coachWeek = availableWeek(data, previewDate);
-  const summary = activePlan
-    ? `${activePlan.exercises.map((exercise) => compactName(exercise.name)).join(', ').replace(/^./, (letter) => letter.toUpperCase())}. ${activePlan.exercises.reduce((sum, item) => sum + item.sets, 0)} sets.`
-    : definition.guidance?.[0] ?? definition.options?.join(' · ') ?? definition.note;
-  const completed = new Set(Object.values(data.sessions).filter((entry) => entry.finishedAt && entry.date >= weekOf && entry.date <= addDays(weekOf, 6)).map((entry) => entry.planId));
-  function open() {
-    if (plan) openWorkout(plan.id, previewDate);
-  }
-  function shiftWeek(days: number) {
-    const shifted = addDays(weekOf, days);
-    if (shifted > nextWeek) return;
-    setWeekOf(shifted);
-    setPreviewDate(addDays(previewDate, days));
-  }
-  const when = current ? 'Today' : currentWeek ? weekday : displayDate(previewDate, { weekday: 'short', day: 'numeric', month: 'short' });
-  const photo = mixPhotos(weekOf)[Math.max(0, dates.indexOf(previewDate))];
-  const action = session?.finishedAt ? 'View session' : session ? 'Resume workout' : future ? 'Preview session' : current ? 'View workout' : 'Log this day';
-  const weekLabel = currentWeek ? 'This week' : viewingNext ? 'Next week'
-    : `${displayDate(weekOf)} – ${displayDate(addDays(weekOf, 6))}`;
-  const dayLabel = kind === 'cardio' ? 'Cardio' : kind === 'rest' ? 'Rest' : `Day ${day}`;
+  const progress = workoutsDoneThisWeek(data, today);
+  const [selected, setSelected] = useState<number | null>(progress.upNext);
+  const [confirming, setConfirming] = useState<number | null>(null);
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState('');
+  const group = useId();
+  const titleId = useId();
+  const live = revisionCovering(programme.state, today)?.days;
+  const days = programmeDays.map((day) => {
+    const current = live?.find((item) => item.day === day.day);
+    return { day: day.day, type: current?.type ?? day.type, title: current?.title || day.title };
+  }).sort((a, b) => a.day - b.day);
+  const current = days.find((day) => day.day === selected);
 
-  return <section className="screen screen-nav screen-today">
-    <div className="screen-toolbar">
-      <span />
-      <RoundButton aria-label="Send this week's log" onClick={openCheckIn}><MessageSquare size={20} /></RoundButton>
+  function choose(number: number) {
+    const done = progress.done.has(number);
+    if (done && selected !== number) setConfirming(number);
+    else { setSelected(number); setConfirming(null); }
+  }
+
+  function onKey(event: KeyboardEvent<HTMLDivElement>) {
+    const delta = event.key === 'ArrowRight' || event.key === 'ArrowDown' ? 1
+      : event.key === 'ArrowLeft' || event.key === 'ArrowUp' ? -1 : 0;
+    if (!delta) return;
+    event.preventDefault();
+    const numbers = days.map((day) => day.day);
+    const index = Math.max(0, numbers.indexOf(selected ?? progress.upNext ?? numbers[0]));
+    const next = numbers[(index + delta + numbers.length) % numbers.length];
+    choose(next);
+    if (!progress.done.has(next) || next === selected) requestAnimationFrame(() => document.getElementById(`${group}-${next}`)?.focus());
+  }
+
+  async function start(day: (typeof days)[number]) {
+    if (busy) return;
+    setError('');
+    if (dayKind(day.type) === 'strength') {
+      const plan = weekPlans(data, today, undefined, programme).find((item) => item.day === day.day);
+      if (!plan) { setError('This workout is not in the programme.'); return; }
+      openWorkout(plan.id, today);
+      return;
+    }
+    setBusy(true);
+    try {
+      const saved = await mutate({ type: 'logWorkout', workoutNumber: day.day });
+      setSelected(workoutsDoneThisWeek(saved.data, today).upNext);
+      openHabits();
+    } catch (reason) {
+      setError(reason instanceof Error ? reason.message : 'Could not save. Try again.');
+    } finally { setBusy(false); }
+  }
+
+  const confirmed = confirming == null ? undefined : days.find((day) => day.day === confirming);
+  const confirmedDone = confirmed ? progress.done.get(confirmed.day) : undefined;
+
+  return <section className="screen screen-nav screen-home">
+    <div className="home-bar">
+      <span className="home-avatar" aria-hidden="true">{initials}</span>
+      <time className="home-date" dateTime={today}>{homeDate(today)}</time>
+      <RoundButton aria-label="Check-in" onClick={openCheckIn}><MessageSquare size={20} /></RoundButton>
     </div>
-    <HeadingSentence className="heading-small" lead={current ? `Hi, ${firstName}.` : viewingNext ? `${weekday}, next week.` : future ? `${weekday} preview.` : `${weekday} ${displayDate(previewDate)}.`} follow={summary} />
-    <PhotoHero src={`/images/days/${photo.src}`} position={photo.position} title={title} label={`${when} · ${dayLabel}`} onClick={plan ? open : undefined} />
-    {resume && resumePlan && <Pill className="pill-white" onClick={() => openWorkout(resume.planId, resume.date)}>
-      Resume {dayTitle(resumePlan)} · {displayDate(resume.date)}
-    </Pill>}
-    <div className="row-stack">
-      <section className="week-row" aria-label="Training week">
-        <div className="week-switch">
-          <RoundButton className="round-muted" aria-label="Previous week" onClick={() => shiftWeek(-7)}><ChevronLeft size={18} /></RoundButton>
-          <span>{weekLabel}</span>
-          <RoundButton className="round-muted" aria-label="Next week" onClick={() => shiftWeek(7)} disabled={viewingNext}><ChevronRight size={18} /></RoundButton>
-        </div>
-        <div className="week-caption"><span>Tap a day</span><strong>{completed.size} of {plans.length} strength</strong></div>
-        <ChipGroup label="Day of the week" className="week-strip" value={previewDate} onChange={setPreviewDate}
-          options={dates.map((dayDate) => {
-            const item = dayOn(programme, data, dayDate);
-            const itemKind = dayKind(item.type);
-            const name = displayDate(dayDate, { weekday: 'long' });
-            const logged = Object.values(data.sessions).some((entry) => entry.date === dayDate && entry.finishedAt);
-            const mark = itemKind === 'cardio' ? 'Cardio' : itemKind === 'rest' ? 'Rest' : item.title.replace(/\s+body$/i, '');
-            const role = itemKind === 'cardio' ? 'cardio day' : itemKind === 'rest' ? 'rest day' : `Day ${item.day}, ${item.title}`;
-            return {
-              value: dayDate, accessibleLabel: `${name} ${displayDate(dayDate)}, ${role}${dayDate === today ? ', today' : ''}${logged ? ', logged' : ''}`,
-              label: <><strong data-kind={itemKind}>{name[0]}</strong><small>{mark}</small></>,
-            };
-          })} />
-      </section>
+    <HeadingSentence className="heading-small home-heading" lead="Pick today's." follow="Any order." />
+    <div className="workout-grid" role="radiogroup" aria-label="Choose today's workout" onKeyDown={onKey}>
+      {days.map((day) => {
+        const done = progress.done.get(day.day);
+        const upNext = day.day === progress.upNext;
+        const checked = day.day === selected;
+        const photo = workoutPhoto[day.day];
+        const name = `Workout ${day.day}, ${day.title}${done ? `, done ${done.weekday}` : upNext ? ', up next' : ''}${checked ? ', selected' : ''}`;
+        return <button type="button" role="radio" id={`${group}-${day.day}`} key={day.day} className="workout-tile"
+          aria-checked={checked} aria-label={name} tabIndex={checked || (selected == null && upNext) ? 0 : -1}
+          data-done={done ? true : undefined} onClick={() => choose(day.day)}>
+          {photo && <Image src={photo} alt="" fill sizes="180px" />}
+          <span className="workout-tile-scrim" aria-hidden="true" />
+          {(done || upNext) && <span className="workout-tile-pill" data-done={done ? true : undefined} data-next={upNext || undefined}>
+            {done ? `✓ ${done.weekday}` : 'Up next'}
+          </span>}
+          <span className="workout-tile-copy" aria-hidden="true">
+            <span>WORKOUT {day.day}</span>
+            <strong>{day.title}</strong>
+          </span>
+        </button>;
+      })}
+      <div className="week-tile" aria-label={`${progress.count} of 7 workouts done this week, resets Monday`}>
+        <span>This week</span>
+        <span className="week-count">{progress.count}<span> of 7</span></span>
+        <span className="week-bars" aria-hidden="true">
+          {days.map((day) => <span key={day.day} data-done={progress.done.has(day.day) || undefined} />)}
+        </span>
+        <span>Resets Monday</span>
+      </div>
     </div>
-    {revision?.deload && <p className="fine">Deload week.</p>}
-    {revision?.weekNote ? <details className="disclosure"><summary>Programme note</summary><p>{revision.weekNote}</p></details>
-      : !!coachWeek?.notes?.length && <details className="disclosure"><summary>Brenna’s notes · Week {coachWeek.number}</summary>{coachWeek.notes.map((note, index) => <p key={index}>{note}</p>)}</details>}
+    {error && <p className="notice" role="alert">{error}</p>}
     <div className="screen-actions">
-      {plan && <PrimaryButton onClick={open}>{action}</PrimaryButton>}
-      <WeeklyCheckInLink />
+      <PrimaryButton disabled={!current || busy} onClick={() => current && void start(current)}>
+        {busy ? 'Saving…' : current ? startLabel(current.day, current.type, current.title) : 'All 7 done this week'}
+      </PrimaryButton>
     </div>
+    {confirmed && confirmedDone && <BottomSheet className="again-sheet" labelId={titleId} onClose={() => setConfirming(null)}>
+      <HeadingSentence id={titleId} className="heading-small" lead={`Do Workout ${confirmed.day} again?`} follow={`You did ${confirmed.title.toLowerCase()} on ${confirmedDone.weekdayLong}.`} />
+      <p className="again-note">It'll be logged as an extra session. Your week still counts it once.</p>
+      <PrimaryButton onClick={() => { setSelected(confirmed.day); setConfirming(null); }}>Do again</PrimaryButton>
+      <PrimaryButton className="button-muted" onClick={() => setConfirming(null)}>Pick another</PrimaryButton>
+    </BottomSheet>}
   </section>;
 }

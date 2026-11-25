@@ -200,6 +200,8 @@ export function ProgrammeEditor({ today, data, programme, onSave }: {
   }
 
   const newer = programme.revision !== seen && dirty;
+  const openIndex = draft.days.findIndex((day) => day.id === openDay);
+  const open = openIndex >= 0 ? draft.days[openIndex] : undefined;
   return <section className="screen screen-nav screen-programme">
     <HeadingSentence className="heading-small" lead="Programme." follow="Shared with Brenna." />
     <ChipGroup label="Programme section" value={view} onChange={(value) => setView(value as View)} options={[
@@ -222,39 +224,43 @@ export function ProgrammeEditor({ today, data, programme, onSave }: {
         <Field label="Steps to" inputMode="numeric" value={draft.stepsMax} onChange={(stepsMax) => setDraft({ ...draft, stepsMax })} />
         <Field wide multiline label="Week note" value={draft.weekNote} onChange={(weekNote) => setDraft({ ...draft, weekNote })} />
       </div>
-      <div className="programme-days">
-        {draft.days.map((day, index) => <article key={day.id} className="programme-day">
-          <button type="button" className="programme-day-toggle" aria-expanded={openDay === day.id} onClick={() => setOpenDay(openDay === day.id ? undefined : day.id)}>
-            <span>Day {index + 1}</span>
-            <strong>{day.title || 'Untitled'}</strong>
-            <small>{day.type === 'strength' ? `${day.exercises.length} exercises` : day.type === 'cardio' ? 'Cardio' : 'Rest'}</small>
-          </button>
-          {openDay === day.id && <div className="programme-day-body">
-            <Field wide label="Day name" value={day.title} onChange={(title) => updateDay(index, { title })} />
-            <ChipGroup label={`Day ${index + 1} type`} value={day.type} options={[...dayKinds]} onChange={(type) => updateDay(index, { type: type as DayDraft['type'] })} />
+      <div className="programme-split">
+        <div className="programme-days">
+          {draft.days.map((day, index) => <article key={day.id} className="programme-day">
+            <button type="button" className="programme-day-toggle" style={{ order: index * 2 }} aria-expanded={openDay === day.id} onClick={() => setOpenDay(openDay === day.id ? undefined : day.id)}>
+              <span>Day {index + 1}</span>
+              <strong>{day.title || 'Untitled'}</strong>
+              <small>{day.type === 'strength' ? `${day.exercises.length} exercises` : day.type === 'cardio' ? 'Cardio' : 'Rest'}</small>
+            </button>
+          </article>)}
+        </div>
+        <div className="programme-stage" style={{ order: openIndex >= 0 ? openIndex * 2 + 1 : draft.days.length * 2 }}>
+          {open ? <div className="programme-day-body">
+            <Field wide label="Day name" value={open.title} onChange={(title) => updateDay(openIndex, { title })} />
+            <ChipGroup label={`Day ${openIndex + 1} type`} value={open.type} options={[...dayKinds]} onChange={(type) => updateDay(openIndex, { type: type as DayDraft['type'] })} />
             <span className="programme-actions">
-              <Pill onClick={() => setDraft((current) => ({ ...current, days: moveItem(current.days, index, -1) }))}>Move up</Pill>
-              <Pill onClick={() => setDraft((current) => ({ ...current, days: moveItem(current.days, index, 1) }))}>Move down</Pill>
-              <Pill onClick={() => setDraft((current) => ({ ...current, days: duplicateDay(current.days, index) }))} disabled={index === draft.days.length - 1}>Copy to next day</Pill>
+              <Pill onClick={() => setDraft((current) => ({ ...current, days: moveItem(current.days, openIndex, -1) }))}>Move up</Pill>
+              <Pill onClick={() => setDraft((current) => ({ ...current, days: moveItem(current.days, openIndex, 1) }))}>Move down</Pill>
+              <Pill onClick={() => setDraft((current) => ({ ...current, days: duplicateDay(current.days, openIndex) }))} disabled={openIndex === draft.days.length - 1}>Copy to next day</Pill>
             </span>
-            {day.type === 'strength' && <>
-              {day.exercises.map((exercise, exerciseIndex) => <ExerciseEditor key={exercise.id} exercise={exercise}
-                onChange={(patch) => updateExercise(index, exerciseIndex, patch)}
-                onMove={(direction) => updateDay(index, { exercises: moveItem(day.exercises, exerciseIndex, direction) })}
-                onRemove={() => updateDay(index, { exercises: day.exercises.filter((_, position) => position !== exerciseIndex) })}
-                onReplace={() => updateDay(index, { exercises: day.exercises.map((item, position) => position === exerciseIndex ? { ...blankExercise(day.exercises.map((entry) => entry.id)), sets: item.sets, warmupSets: item.warmupSets, rest: item.rest, mode: item.mode, repMin: item.repMin, repMax: item.repMax, per: item.per } : item) })} />)}
-              <Pill onClick={() => updateDay(index, { exercises: [...day.exercises, blankExercise(day.exercises.map((exercise) => exercise.id))] })}>Add exercise</Pill>
+            {open.type === 'strength' && <>
+              {open.exercises.map((exercise, exerciseIndex) => <ExerciseEditor key={exercise.id} exercise={exercise}
+                onChange={(patch) => updateExercise(openIndex, exerciseIndex, patch)}
+                onMove={(direction) => updateDay(openIndex, { exercises: moveItem(open.exercises, exerciseIndex, direction) })}
+                onRemove={() => updateDay(openIndex, { exercises: open.exercises.filter((_, position) => position !== exerciseIndex) })}
+                onReplace={() => updateDay(openIndex, { exercises: open.exercises.map((item, position) => position === exerciseIndex ? { ...blankExercise(open.exercises.map((entry) => entry.id)), sets: item.sets, warmupSets: item.warmupSets, rest: item.rest, mode: item.mode, repMin: item.repMin, repMax: item.repMax, per: item.per } : item) })} />)}
+              <Pill onClick={() => updateDay(openIndex, { exercises: [...open.exercises, blankExercise(open.exercises.map((exercise) => exercise.id))] })}>Add exercise</Pill>
             </>}
-            {day.type === 'cardio' && <>
-              <Field wide label="Cardio note" value={day.note} onChange={(note) => updateDay(index, { note })} />
-              <Field wide multiline label="Options, one per line" value={day.options} onChange={(options) => updateDay(index, { options })} />
+            {open.type === 'cardio' && <>
+              <Field wide label="Cardio note" value={open.note} onChange={(note) => updateDay(openIndex, { note })} />
+              <Field wide multiline label="Options, one per line" value={open.options} onChange={(options) => updateDay(openIndex, { options })} />
             </>}
-            {day.type === 'active-rest' && <>
-              <Field wide label="Rest note" value={day.note} onChange={(note) => updateDay(index, { note })} />
-              <Field wide multiline label="Guidance, one per line" value={day.guidance} onChange={(guidance) => updateDay(index, { guidance })} />
+            {open.type === 'active-rest' && <>
+              <Field wide label="Rest note" value={open.note} onChange={(note) => updateDay(openIndex, { note })} />
+              <Field wide multiline label="Guidance, one per line" value={open.guidance} onChange={(guidance) => updateDay(openIndex, { guidance })} />
             </>}
-          </div>}
-        </article>)}
+          </div> : <p className="programme-day-empty">Choose a day to edit.</p>}
+        </div>
       </div>
       {!parsed.ok && <p className="notice" role="alert">{parsed.error}</p>}
       {!!changes.length && <details className="programme-review" open={changes.length <= 8}>
@@ -291,7 +297,7 @@ function Messages({ programme, author, message, busy, onAuthor, onMessage, onSen
   onAuthor: (author: CoachAuthor) => void; onMessage: (value: string) => void; onSend: () => void;
 }) {
   const notes = programme.state.messages;
-  return <>
+  return <div className="programme-messages">
     <ChipGroup label="Writing as" value={author} options={[...authors]} onChange={(value) => onAuthor(value as CoachAuthor)} />
     {notes.length ? <ol className="coach-thread">
       {notes.map((note) => <li key={note.id} data-author={note.author}>
@@ -299,9 +305,11 @@ function Messages({ programme, author, message, busy, onAuthor, onMessage, onSen
         <p>{note.text}</p>
       </li>)}
     </ol> : <p className="fine">Leave a question or a note. Brenna’s replies stay here, on every device.</p>}
-    <label className="input-group"><span>Note</span>
-      <textarea rows={3} value={message} maxLength={4_000} placeholder={author === 'brenna' ? 'Reply to Jessie' : 'Question or feedback for Brenna'} onChange={(event) => onMessage(event.target.value)} />
-    </label>
-    <PrimaryButton onClick={onSend} disabled={busy || !message.trim()}>{busy ? 'Sending…' : 'Send note'}</PrimaryButton>
-  </>;
+    <div className="programme-composer">
+      <label className="input-group"><span>Note</span>
+        <textarea rows={3} value={message} maxLength={4_000} placeholder={author === 'brenna' ? 'Reply to Jessie' : 'Question or feedback for Brenna'} onChange={(event) => onMessage(event.target.value)} />
+      </label>
+      <PrimaryButton onClick={onSend} disabled={busy || !message.trim()}>{busy ? 'Sending…' : 'Send note'}</PrimaryButton>
+    </div>
+  </div>;
 }

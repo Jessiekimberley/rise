@@ -153,6 +153,7 @@ export function Workout({ date, today, planId, onPlan, onOpen, onLogToday, data,
   const [selection, setSelection] = useState<Selection>();
   const [cues, setCues] = useState(false);
   const [rest, setRest] = useState<RestDetails>();
+  const [restMini, setRestMini] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
   const [confirming, setConfirming] = useState<'discard'>();
@@ -332,10 +333,13 @@ export function Workout({ date, today, planId, onPlan, onOpen, onLogToday, data,
         : focus ? lastPerformance(data, date, focus.id, nextSlot?.log.variant ?? '')?.sets.at(-1) : undefined;
       const sample = continuing ? (justLogged?.set ?? logged ?? active.fallback) : undefined;
       const loggedNumber = justLogged?.number ?? (logged && !kind ? index + 1 : undefined);
+      const pair = sample?.seconds != null ? `${sample.seconds}s`
+        : sample ? `${sample.weight == null ? '' : `${sample.weight} × `}${sample.reps ?? '—'}${sample.perSide ? `/${sample.perSide}` : ''}` : '';
+      setRestMini(false);
       setRest({
         startedAt: Date.now(),
         seconds: exercise.rest,
-        title: loggedNumber ? `${exercise.name} · set ${loggedNumber} logged` : exercise.name,
+        logged: loggedNumber && pair ? `Set ${loggedNumber} logged · ${pair}` : undefined,
         upcoming,
         next: sample ? compactSet(sample) : focus && upcoming !== 'Submit record' ? prescribedLoad(focus) : undefined,
         last: previous ? lastMark(previous) : undefined,
@@ -392,11 +396,12 @@ export function Workout({ date, today, planId, onPlan, onOpen, onLogToday, data,
       setSelection({ slotId: original.id, index: nextIndex });
     }
 
-    return <>
+    return <div className="workout-logging" data-rest={rest ? restMini ? 'mini' : 'open' : undefined}>
       {sessionBar}
-      {rest && <RestTimer key={rest.startedAt} details={rest} audio={audio} close={clearRest} />}
+      {rest && <RestTimer key={rest.startedAt} details={rest} audio={audio} close={clearRest} onMini={setRestMini} />}
       <div className="workout-exercise" hidden={cues}>
         <LogSet key={original.id} rows={rows} active={active} exerciseNumber={activeNumber} exerciseCount={slots.length}
+          resting={rest ? restMini ? 'mini' : 'open' : undefined}
           workSetCount={count} date={date} data={data} close={() => go()}
           choose={(position) => setSelection({ slotId: original.id, index: position })}
           cues={() => { setCues(true); window.scrollTo(0, 0); }}
@@ -408,7 +413,7 @@ export function Workout({ date, today, planId, onPlan, onOpen, onLogToday, data,
       </div>
       {cues && <Cues key={original.id} exercise={prescription} variant={variant}
         back={() => { setCues(false); window.scrollTo(0, 0); }} />}
-    </>;
+    </div>;
   }
 
   const actionText = session?.finishedAt ? 'Back to Today' : !session ? 'Start workout' : next ? `Continue with ${next.exercise.name}` : 'Submit record';

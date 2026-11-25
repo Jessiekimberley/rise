@@ -6,7 +6,7 @@ import { join } from 'node:path';
 import test from 'node:test';
 import { PGlite } from '@electric-sql/pglite';
 import { appendCheckIn, type DocsConfig } from '../lib/google';
-import { blocksForDates, buildReport, lastPerformance, ordinal, progressPoints, scheduledProgrammeDay, temporarySchedule, todayKey, trainingWeekStart, weekStart, workoutElapsedMs, workoutsThisWeek } from '../lib/insights';
+import { blocksForDates, buildReport, lastPerformance, ordinal, progressPoints, scheduledProgrammeDay, temporarySchedule, todayKey, trainingWeekStart, weekStart, workoutElapsedMs, workoutsDoneThisWeek, workoutsThisWeek } from '../lib/insights';
 import { applyCommand, commandSchema, createData, effectiveSlot, emptyHabits, sessionKey, type SetLog } from '../lib/model';
 import { plans, prescribedReps } from '../lib/programme';
 import { reviewProgramme } from '../lib/programme-review';
@@ -515,4 +515,38 @@ test('reviewed midweek changes preserve started workouts, and recurring swaps ke
   applyCommand(data, { type: 'substitute', date: upcoming, planId: plan.id, slotId: rdl.id, exerciseId: rdl.id, variant: 'Barbell' }, now);
   assert.equal(effectiveSlot(data, upcoming, plan.id, rdl).variant, 'Barbell');
   assert.equal(effectiveSlot(data, '2026-12-07', plan.id, rdl).variant, 'Dumbbells');
+});
+
+test('a workout counts once between Monday and Sunday in Auckland', () => {
+  const data = createData();
+  commandSchema.parse({ type: 'logWorkout', workoutNumber: 3 });
+  applyCommand(data, { type: 'logWorkout', workoutNumber: 3 }, '2026-11-22T11:00:00.000Z');
+  applyCommand(data, { type: 'logWorkout', workoutNumber: 6 }, '2026-11-29T10:59:00.000Z');
+  applyCommand(data, { type: 'logWorkout', workoutNumber: 7 }, '2026-11-29T11:00:00.000Z');
+  const week = workoutsDoneThisWeek(data, '2026-11-26');
+  assert.equal(week.count, 2);
+  assert.equal(week.upNext, 1);
+  assert.equal(week.done.get(3)?.weekday, 'Mon');
+  assert.equal(week.done.get(3)?.weekdayLong, 'Monday');
+  assert.equal(week.done.get(6)?.weekday, 'Sun');
+  assert.equal(week.done.has(7), false);
+  applyCommand(data, { type: 'logWorkout', workoutNumber: 3 }, '2026-11-26T01:00:00.000Z');
+  assert.equal(data.completions?.at(-1)?.isRepeat, true);
+  const still = workoutsDoneThisWeek(data, '2026-11-26');
+  assert.equal(still.count, 2);
+  assert.equal(still.done.get(3)?.weekday, 'Mon');
+  assert.throws(() => applyCommand(createData(), { type: 'logWorkout', workoutNumber: 1 }, '2026-11-26T01:00:00.000Z'), /strength/);
+
+  const strength = createData();
+  const set: SetLog = { exerciseId: 'leg-press', variant: '', weight: 40, reps: 8, seconds: null, effort: null };
+  applyCommand(strength, { type: 'putSet', date: '2026-11-23', planId: 'lower-1', slotId: 'leg-press', index: 0, set }, '2026-11-23T01:00:00.000Z');
+  applyCommand(strength, { type: 'finish', date: '2026-11-23', planId: 'lower-1' }, '2026-11-22T11:30:00.000Z');
+  assert.deepEqual(strength.completions?.[0], { workoutNumber: 1, completedAt: '2026-11-22T11:30:00.000Z', isRepeat: false });
+  assert.equal(workoutsDoneThisWeek(strength, '2026-11-26').done.get(1)?.weekday, 'Mon');
+  applyCommand(strength, { type: 'putSet', date: '2026-11-26', planId: 'lower-1', slotId: 'leg-press', index: 0, set }, '2026-11-26T01:00:00.000Z');
+  applyCommand(strength, { type: 'finish', date: '2026-11-26', planId: 'lower-1' }, '2026-11-26T02:00:00.000Z');
+  assert.equal(strength.completions?.at(-1)?.isRepeat, true);
+  assert.equal(workoutsDoneThisWeek(strength, '2026-11-26').count, 1);
+  assert.equal(workoutsDoneThisWeek(strength, '2026-11-26').done.get(1)?.weekday, 'Mon');
+  assert.equal(workoutsDoneThisWeek(strength, '2026-11-30').count, 0);
 });

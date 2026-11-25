@@ -1,6 +1,6 @@
 import { z } from 'zod';
-import type { ProgrammeSnapshot } from './prescription';
-import { canonicalVariant, exerciseOptions, findPlan, type Exercise, type Plan } from './programme';
+import { revisionCovering, type ProgrammeSnapshot } from './prescription';
+import { canonicalVariant, dayKind, exerciseOptions, findPlan, programmeDays, type Exercise, type Plan } from './programme';
 import { mondayOf, programmeExercises, weekPlans, workoutPlan, type CoachWeek } from './weeks';
 import type { DocTarget } from './coach-doc';
 
@@ -69,6 +69,7 @@ export const commandSchema = z.discriminatedUnion('type', [
   z.object({ type: z.literal('deleteCheckIn'), id: z.uuid() }),
   z.object({ type: z.literal('preparePublish'), id: z.uuid(), target: z.object({ documentId: z.string(), tabId: z.string() }) }),
   z.object({ type: z.literal('markPublished'), id: z.uuid(), text: z.string().trim().min(1).max(24_000) }),
+  z.object({ type: z.literal('logWorkout'), workoutNumber: z.number().int().min(1).max(7) }),
 ]);
 
 export type Command = z.infer<typeof commandSchema> | { type: 'syncProgramme'; date: string; weeks: CoachWeek[] } |
@@ -108,8 +109,14 @@ export type Session = {
   slots: Record<string, SlotLog>;
   slotOrder?: string[];
 };
+export type WorkoutCompletion = {
+  workoutNumber: number;
+  completedAt: string;
+  isRepeat: boolean;
+};
 export type TrainingData = {
   sessions: Record<string, Session>;
+  completions?: WorkoutCompletion[];
   habits: Record<string, HabitLog>;
   checkIns: Record<string, CheckIn>;
   startedOn?: string;
@@ -199,6 +206,35 @@ export function effectiveSlot(data: TrainingData, date: string, planId: string, 
 
 export class TrainingValidationError extends Error {}
 
+const aucklandKey = (iso: string) => new Intl.DateTimeFormat('sv-SE', { timeZone: 'Pacific/Auckland' }).format(new Date(iso));
+
+function shiftDateKey(date: string, days: number) {
+  const noon = new Date(`${date}T12:00:00Z`);
+  noon.setUTCDate(noon.getUTCDate() + days);
+  return noon.toISOString().slice(0, 10);
+}
+
+function mondayKey(date: string) {
+  const noon = new Date(`${date}T12:00:00Z`);
+  return shiftDateKey(date, -((noon.getUTCDay() + 6) % 7));
+}
+
+function inAucklandWeek(iso: string, start: string, end: string) {
+  const key = aucklandKey(iso);
+  return key >= start && key < end;
+}
+
+function recordCompletion(data: TrainingData, workoutNumber: number, completedAt: string) {
+  const start = mondayKey(aucklandKey(completedAt));
+  const end = shiftDateKey(start, 7);
+  const repeat = (data.completions ?? []).some((item) => item.workoutNumber === workoutNumber && inAucklandWeek(item.completedAt, start, end))
+    || Object.values(data.sessions).some((session) => {
+      if (!session.finishedAt || session.finishedAt === completedAt || !inAucklandWeek(session.finishedAt, start, end)) return false;
+      return (session.plan?.day ?? findPlan(session.planId)?.day) === workoutNumber;
+    });
+  (data.completions ??= []).push({ workoutNumber, completedAt, isRepeat: repeat });
+}
+
 function settlePause(session: Session, now: string) {
   if (!session.pausedAt) return;
   const total = (session.pausedMs ?? 0) + Math.max(0, Date.parse(now) - Date.parse(session.pausedAt));
@@ -284,6 +320,13 @@ export function applyCommand(data: TrainingData, command: Command, now: string, 
       delete previous.publishingAt;
       return;
     }
+    case 'logWorkout': {
+      const live = prescription ? revisionCovering(prescription.state, aucklandKey(now))?.days.find((item) => item.day === command.workoutNumber) : undefined;
+      const day = live ?? programmeDays.find((item) => item.day === command.workoutNumber);
+      if (!day || dayKind(day.type) === 'strength') throw new TrainingValidationError('Finish the strength workout to log it.');
+      recordCompletion(data, command.workoutNumber, now);
+      return;
+    }
   }
 
   const plan = workoutPlan(data, command.date, command.planId, prescription);
@@ -322,6 +365,7 @@ export function applyCommand(data: TrainingData, command: Command, now: string, 
       throw new TrainingValidationError('Log a set before finishing this workout.');
     }
     settlePause(active, now);
+    if (!active.finishedAt) recordCompletion(data, plan.day, now);
     active.finishedAt ??= now;
   }
   if (command.type === 'start' || command.type === 'finish') return;

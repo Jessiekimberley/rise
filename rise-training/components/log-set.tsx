@@ -150,11 +150,11 @@ function SwipeDelete({ enabled, label, onDelete, onSwiped, children, current, do
   </div>;
 }
 
-export function LogSet({ rows, active, exerciseNumber, exerciseCount, workSetCount, date, data, note, close, choose, cues, rest,
+export function LogSet({ rows, active, exerciseNumber, exerciseCount, workSetCount, date, data, note, close, choose, cues, rest, resting,
   nextExercise, finishing, review, complete, save, remove, add, drop, saveNote }: {
   rows: LogSetRow[]; active: LogSetRow; exerciseNumber: number; exerciseCount: number; workSetCount: number; date: string; data: TrainingData;
   note: string;
-  close: () => void; choose: (index: number) => void; cues: () => void; rest?: () => void;
+  close: () => void; choose: (index: number) => void; cues: () => void; rest?: () => void; resting?: 'open' | 'mini';
   nextExercise?: string; finishing: boolean; review?: () => void;
   complete: () => Promise<void>; save: (set: SetLog) => Promise<void>; remove: () => Promise<void>;
   add: (kind?: ExtraKind) => Promise<void>; drop: (target: { index?: number; kind?: ExtraKind }) => Promise<void>;
@@ -307,7 +307,8 @@ export function LogSet({ rows, active, exerciseNumber, exerciseCount, workSetCou
     }
   }
 
-  return <form className="screen screen-logger" aria-labelledby="log-heading" onSubmit={submit}>
+  const startsRest = Boolean(rest) && !logged && !extra && !finishing;
+  return <form className="screen screen-logger" data-rest={resting} aria-labelledby="log-heading" onSubmit={submit}>
     <div className="screen-toolbar">
       <RoundButton className="logger-close" aria-label="Back to exercises" onClick={close} disabled={locked}><ChevronLeft size={20} aria-hidden="true" /></RoundButton>
       <span className="logger-position">Exercise {exerciseNumber} of {exerciseCount}</span>
@@ -413,7 +414,7 @@ export function LogSet({ rows, active, exerciseNumber, exerciseCount, workSetCou
         <span>Up next · {nextExercise ?? 'Submit record'}</span>
       </div>
       <PrimaryButton type="submit" disabled={locked}>
-        {busy ? 'Saving…' : finishing ? 'Done' : logged ? `Update ${name.toLowerCase()}` : `Log ${name.toLowerCase()}`}
+        {busy ? 'Saving…' : finishing ? 'Done' : logged ? `Update ${name.toLowerCase()}` : `Log ${name.toLowerCase()}${startsRest ? ' · start rest' : ''}`}
       </PrimaryButton>
       {!finishing && logged && <button type="button" className="logger-remove" onClick={() => void perform(remove)} disabled={locked}>Remove {name.toLowerCase()}</button>}
       {!finishing && review && <button type="button" className="logger-remove" onClick={review} disabled={locked}>Back to exercise summary</button>}
