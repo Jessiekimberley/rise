@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import type { Exercise, Plan } from './programme';
+import { canonicalVariant, exerciseOptions, type Exercise, type Plan } from './programme';
 import { mondayOf, programmeExercises, weekPlans, workoutPlan, type CoachWeek } from './weeks';
 import type { DocTarget } from './coach-doc';
 
@@ -11,14 +11,19 @@ const date = z.iso.date();
 const key = z.string().min(1).max(64);
 const variation = z.string().max(80);
 const text = z.string().max(2_000);
+const stepCount = z.number().int().min(0).max(200_000);
 
 export const habitsSchema = z.object({
-  steps: blankableNumber(200_000, true),
+  steps: stepCount.nullable(),
   water: blankableNumber(30),
   sleep: blankableNumber(24),
   nutrition: text,
   recovery: text,
+  sleepQuality: z.enum(['Deep', 'OK', 'Broken']).optional(),
+  fuelling: z.array(z.string().min(1).max(100)).max(5).optional(),
 });
+
+export const stepSyncSchema = z.strictObject({ date, steps: stepCount });
 
 const setSchema = z.object({
   exerciseId: key, variant: variation,
@@ -40,9 +45,13 @@ export const commandSchema = z.discriminatedUnion('type', [
   z.object({ type: z.literal('finish'), ...session }),
   z.object({ type: z.literal('putSet'), ...slot, index: z.number().int().min(0).max(19), set: setSchema }),
   z.object({ type: z.literal('removeSet'), ...slot, index: z.number().int().min(0).max(19) }),
-  z.object({ type: z.literal('substitute'), ...slot, exerciseId: key, variant: variation }),
+  z.object({ type: z.literal('completeExercise'), ...slot, rir: blankableNumber(3, true) }),
+  z.object({ type: z.literal('saveWarmup'), ...slot, set: setSchema.nullable() }),
+  z.object({ type: z.literal('substitute'), ...slot, exerciseId: key, variant: variation, recurring: z.boolean().optional() }),
   z.object({ type: z.literal('note'), ...slot, text }),
   z.object({ type: z.literal('habits'), date, data: habitsSchema }),
+  z.object({ type: z.literal('patchHabits'), date, data: habitsSchema.partial() }),
+  z.object({ type: z.literal('bottleSize'), litres: z.number().finite().min(0.05).max(5) }),
   z.object({ type: z.literal('programmeStart'), date }),
   z.object({ type: z.literal('checkIn'), data: checkInSchema }),
   z.object({ type: z.literal('preparePublish'), id: z.uuid(), target: z.object({ documentId: z.string(), tabId: z.string() }) }),
@@ -50,6 +59,8 @@ export const commandSchema = z.discriminatedUnion('type', [
 ]);
 
 export type Command = z.infer<typeof commandSchema> | { type: 'syncProgramme'; date: string; weeks: CoachWeek[] } |
+  ({ type: 'syncSteps' } & z.infer<typeof stepSyncSchema>) |
+  { type: 'saveSchedule'; days: Readonly<Record<string, number>> } |
   { type: 'docsTarget'; mode: 'programme' | 'checkIns'; target: DocTarget; update?: { date: string; weeks: CoachWeek[] } };
 export type HabitLog = z.infer<typeof habitsSchema>;
 export type SetLog = z.infer<typeof setSchema> & { exerciseName?: string; perSide?: Exercise['perSide'] };
@@ -58,6 +69,8 @@ export type SlotLog = {
   exerciseId: string;
   variant: string;
   sets: Record<number, SetLog>;
+  completion?: { completedAt: string; rir: number | null };
+  warmup?: SetLog;
   note: string;
 };
 export type Session = {
@@ -75,6 +88,9 @@ export type TrainingData = {
   startedOn?: string;
   weeks?: Record<number, CoachWeek>;
   docs?: Partial<Record<'programme' | 'checkIns', DocTarget>>;
+  recurringSwaps?: Record<string, { exerciseId: string; variant: string; from: string }>;
+  bottleLitres?: number;
+  scheduledDays?: Record<string, number>;
 };
 export type TrainingSnapshot = { revision: number; data: TrainingData };
 
@@ -82,21 +98,39 @@ export const createData = (): TrainingData => ({ sessions: {}, habits: {}, check
 export const emptyHabits: HabitLog = { steps: null, water: null, sleep: null, nutrition: '', recovery: '' };
 export const sessionKey = (date: string, planId: string) => `${date}:${planId}`;
 
+export function firstOpenSet(exercise: Exercise, sets: SlotLog['sets']) {
+  return Array.from({ length: exercise.sets }, (_, index) => index).find((index) => !sets[index]);
+}
+
+const swapKey = (planId: string, exerciseId: string) => `${planId}:${exerciseId}`;
+
+export function effectiveSlot(data: TrainingData, date: string, planId: string, exercise: Exercise): SlotLog {
+  const saved = data.sessions[sessionKey(date, planId)]?.slots[exercise.id];
+  if (saved) return saved;
+  const recurring = data.recurringSwaps?.[swapKey(planId, exercise.id)];
+  const variant = recurring && recurring.from <= date && recurring.exerciseId === exercise.id && exerciseOptions(exercise.id).includes(recurring.variant)
+    ? recurring.variant : '';
+  return { exerciseId: exercise.id, variant, sets: {}, note: '' };
+}
+
 export class TrainingValidationError extends Error {}
 
 function checkSelection(data: TrainingData, date: string, exerciseId: string, variant: string, workout: Plan) {
   const exercise = programmeExercises(data, [workout, ...weekPlans(data, date)]).find((item) => item.id === exerciseId);
-  if (!exercise || (variant && !exercise.variants?.includes(variant))) {
+  if (!exercise || (variant && !exercise.variants?.includes(variant) && !exerciseOptions(exercise.id).includes(canonicalVariant(exercise.id, variant)))) {
     throw new TrainingValidationError('Choose an exercise and equipment from the programme.');
   }
   return exercise;
 }
 
 export function applyCommand(data: TrainingData, command: Command, now: string) {
-  if ('date' in command) data.startedOn ??= mondayOf(command.date);
+  if ('date' in command && command.type !== 'syncSteps') data.startedOn ??= mondayOf(command.date);
   switch (command.type) {
     case 'programmeStart':
       data.startedOn = command.date;
+      return;
+    case 'saveSchedule':
+      data.scheduledDays = { ...command.days, ...data.scheduledDays };
       return;
     case 'syncProgramme': {
       const saved = data.weeks ??= {};
@@ -114,6 +148,15 @@ export function applyCommand(data: TrainingData, command: Command, now: string) 
     }
     case 'habits':
       data.habits[command.date] = command.data;
+      return;
+    case 'patchHabits':
+      data.habits[command.date] = { ...emptyHabits, ...data.habits[command.date], ...command.data };
+      return;
+    case 'syncSteps':
+      data.habits[command.date] = { ...emptyHabits, ...data.habits[command.date], steps: command.steps };
+      return;
+    case 'bottleSize':
+      data.bottleLitres = command.litres;
       return;
     case 'checkIn': {
       const existing = data.checkIns[command.data.id];
@@ -151,28 +194,50 @@ export function applyCommand(data: TrainingData, command: Command, now: string) 
 
   const original = plan.exercises.find((item) => item.id === command.slotId);
   if (!original) throw new TrainingValidationError('This exercise is not in the workout.');
-  const log = active.slots[original.id] ??= { exerciseId: original.id, variant: '', sets: {}, note: '' };
+  const log = active.slots[original.id] ??= effectiveSlot(data, command.date, plan.id, original);
   switch (command.type) {
+    case 'saveWarmup':
     case 'putSet': {
-      const selection = checkSelection(data, command.date, command.set.exerciseId, command.set.variant, plan);
-      const oldSet = log.sets[command.index];
+      const warmup = command.type === 'saveWarmup';
+      const set = command.set;
+      if (set === null) {
+        delete log.warmup;
+        break;
+      }
+      const selection = checkSelection(data, command.date, set.exerciseId, set.variant, plan);
+      const oldSet = warmup ? log.warmup : log.sets[command.index];
       const expected = oldSet ?? log;
-      if (expected.exerciseId !== command.set.exerciseId || expected.variant !== command.set.variant) {
+      if (expected.exerciseId !== set.exerciseId || expected.variant !== set.variant) {
         throw new TrainingValidationError('The exercise selection changed. Reopen this set.');
       }
-      if (selection.metric === 'seconds' ? !command.set.seconds || command.set.reps !== null || command.set.weight !== null :
-        !command.set.reps || command.set.seconds !== null || (selection.metric === 'bodyweight' && command.set.weight !== null)) {
+      if (selection.metric === 'seconds' ? !set.seconds || set.reps !== null || set.weight !== null :
+        !set.reps || set.seconds !== null || (selection.metric === 'bodyweight' && set.weight !== null)) {
         throw new TrainingValidationError('Enter the reps or duration you completed.');
       }
-      log.sets[command.index] = { ...command.set, exerciseName: selection.name, perSide: selection.perSide };
+      const entry = { ...set, exerciseName: selection.name, perSide: selection.perSide };
+      if (warmup) log.warmup = entry;
+      else log.sets[command.index] = entry;
       break;
     }
     case 'removeSet':
       delete log.sets[command.index];
+      if (firstOpenSet(original, log.sets) !== undefined) delete log.completion;
       if (!Object.values(active.slots).some((item) => Object.keys(item.sets).length)) delete active.finishedAt;
+      break;
+    case 'completeExercise':
+      if (firstOpenSet(original, log.sets) !== undefined) {
+        throw new TrainingValidationError('Log every working set before marking this exercise done.');
+      }
+      log.completion = { completedAt: log.completion?.completedAt ?? now, rir: command.rir };
       break;
     case 'substitute':
       checkSelection(data, command.date, command.exerciseId, command.variant, plan);
+      if (command.recurring) {
+        if (command.exerciseId !== original.id || !exerciseOptions(original.id).includes(command.variant)) {
+          throw new TrainingValidationError('Choose a recurring option from this exercise.');
+        }
+        (data.recurringSwaps ??= {})[swapKey(plan.id, original.id)] = { exerciseId: command.exerciseId, variant: command.variant, from: command.date };
+      }
       log.exerciseId = command.exerciseId;
       log.variant = command.variant;
       break;

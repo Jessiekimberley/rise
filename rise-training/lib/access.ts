@@ -20,6 +20,17 @@ const sign = (expiry: string, key: string) => createHmac('sha256', key).update(`
 
 export const privateAccessConfigured = () => Boolean(signingKey());
 
+export function stepSyncToken() {
+  const key = signingKey();
+  return key ? createHmac('sha256', key).update(`rise-steps:${ownerId}`).digest('base64url') : undefined;
+}
+
+export function canSyncSteps(authorization: string | null) {
+  const token = stepSyncToken();
+  const supplied = authorization?.match(/^Bearer ([A-Za-z0-9_-]{43})$/i)?.[1];
+  return Boolean(token && supplied && equal(supplied, token));
+}
+
 export function unlock(code: string) {
   const key = signingKey();
   if (!key || !equal(code, key)) return null;

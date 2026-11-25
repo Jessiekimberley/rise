@@ -1,0 +1,82 @@
+{
+  "_source": "Rise Coaching with Brenna, client programme for Jessie Peters (JESSIE_PETERS.docx). Source of truth: do not add exercises, weights or calorie targets that are not here.",
+  "coach": { "name": "Brenna", "business": "Rise Coaching with Brenna", "phone": "027-299-8327", "email": "brennawills@gmail.com", "preferredChannel": "text" },
+  "client": {
+    "name": "Jessie Peters",
+    "goals": ["Build muscular strength", "Improve body comp", "Muscular definition"],
+    "accountability": "2-3 check-ins, detailed feedback, strict"
+  },
+  "days": [
+    {
+      "day": 1, "type": "strength", "title": "Lower body",
+      "exercises": [
+        { "id": "leg-press", "name": "Leg Press", "sets": 4, "reps": "8", "rest": "2:00", "weight": null, "options": [], "cues": "Slow and controlled 3-sec negatives with 1-sec pause at contraction" },
+        { "id": "rdl", "name": "RDL", "sets": 3, "reps": "8-10", "rest": "2:00", "weight": null, "options": ["Barbell", "Dumbbells"], "cues": "Slow and controlled maintaining proper form, watch yourself in the mirror - send me a video of form if you're concerned. Neutral spine, do not arch back, keep weights held in running along your legs, don't drop weight past your kneecaps" },
+        { "id": "leg-extensions", "name": "Leg extensions", "sets": 3, "reps": "12", "rest": "1:30", "weight": null, "options": [], "cues": "3-sec negative and 2-sec pause at top" },
+        { "id": "walking-lunges", "name": "Walking Lunges with dumbbells", "sets": 3, "reps": "10 per leg", "rest": "2:00", "weight": null, "options": [], "cues": "Full range with big steps and controlled movement going up and down, hold dumbbells at your sides" },
+        { "id": "forearm-plank", "name": "Forearm Plank", "sets": 3, "reps": "30 sec-1 min", "rest": "1:00", "weight": null, "logAs": "duration", "options": [], "cues": "Straight back, don't drop your hips or have them too high, squeeze belly button" }
+      ]
+    },
+    {
+      "day": 2, "type": "strength", "title": "Upper body",
+      "exercises": [
+        { "id": "lat-pulldown", "name": "Lat Pulldown", "sets": 4, "reps": "8", "rest": "2:00", "weight": null, "options": ["Wide grip", "Neutral grip"], "cues": "Leaning back engage your core, squeeze your armpits, pull bar down to chest, full stretch to the top" },
+        { "id": "seated-cable-row", "name": "Seated Cable row", "sets": 3, "reps": "10-12", "rest": "1:30", "weight": null, "options": [], "cues": "Full stretch forward, drive elbows back down near hips, squeeze shoulder blades together at contraction" },
+        { "id": "hammer-curl", "name": "Hammer curl with dumbbells", "sets": 3, "reps": "10", "rest": "1:30", "weight": null, "options": [], "cues": "Slow and controlled, keep elbows locked into place at your side, don't swing your arms" },
+        { "id": "tricep-pushdown", "name": "Tricep pushdown on cable", "sets": 3, "reps": "10", "rest": "1:30", "weight": null, "options": [], "cues": "Slow and controlled, keep elbows locked into place at your side" },
+        { "id": "lateral-raises", "name": "Dumbbell lateral raises", "sets": 3, "reps": "12-15", "rest": "1:30", "weight": null, "options": [], "cues": "Slow and controlled, will be pretty light because of rep range. Don't swing your arms or use the momentum. Going out at a 45-degree angle, you're holding the dumbbells but think of pulling them up from your elbows to focus on shoulders" }
+      ]
+    },
+    {
+      "day": 3, "type": "active-rest", "title": "Active rest",
+      "guidance": [
+        "Still hitting step goal so taking morning/evening walks, walks after meals, etc.",
+        "Any tightness or soreness? Walking will help, stretch, use a roller, light yoga, etc.",
+        "Journaling, meal prep - anything you need to do to reflect on your progress and to plan ahead for tomorrow"
+      ]
+    },
+    {
+      "day": 4, "type": "strength", "title": "Lower body",
+      "exercises": [
+        { "id": "back-squat", "name": "Back squat", "sets": 4, "reps": "8", "rest": "2:00", "weight": null, "options": ["Barbell", "Smith machine"], "cues": "No heel elevation here unless you find it is better for your form. Heavy but controlled." },
+        { "id": "hamstring-curl", "name": "Hamstring curl", "sets": 3, "reps": "10", "rest": "1:30", "weight": null, "options": ["Seated", "Lying"], "cues": "Big squeeze at contraction, 3-sec negative" },
+        { "id": "bulgarian-split-squat", "name": "Bulgarian split squat with dumbbells", "sets": 3, "reps": "8 per leg", "rest": "1:30 after both legs done", "weight": null, "options": [], "cues": "Slow and controlled, stretch all the way down knee to floor without resting it" },
+        { "id": "standing-calf-raises", "name": "Standing calf raises", "sets": 3, "reps": "12-15", "rest": "1:15", "weight": null, "options": ["Holding dumbbells", "On smith machine"], "cues": "Controlled descent, get that full stretch 3-sec negative" },
+        { "id": "lying-leg-raises", "name": "Lying Leg raises", "sets": 3, "reps": "12-15", "rest": "1:00", "weight": "Bodyweight", "options": [], "cues": "Slow and controlled, don't let feet touch the ground in between" }
+      ]
+    },
+    {
+      "day": 5, "type": "strength", "title": "Upper body",
+      "exercises": [
+        { "id": "shoulder-press", "name": "Shoulder press", "sets": 4, "reps": "8", "rest": "2:00", "weight": null, "options": ["Machine", "Dumbbells"], "cues": "Elbows out at 45 degrees, bring elbows down just past shoulder height, slow on the way down" },
+        { "id": "chest-press", "name": "Chest press", "sets": 3, "reps": "8-10", "rest": "2:00", "weight": null, "options": ["Machine", "Barbell bench press"], "cues": "Slow and controlled" },
+        { "id": "overhead-tricep-extensions", "name": "Overhead tricep extensions", "sets": 3, "reps": "10-12", "rest": "1:30", "weight": null, "options": [], "cues": "Set cable halfway height, step away, ears tucked between arms, pulling forward above head" },
+        { "id": "reverse-pec-deck", "name": "Reverse pec deck (rear delts)", "sets": 3, "reps": "12", "rest": "1:30", "weight": null, "options": [], "cues": "Don't need to bring arms all the way behind you, think about squeezing shoulder blades together" },
+        { "id": "russian-twists", "name": "Russian twists", "sets": 3, "reps": "10 per side", "rest": "1:00", "weight": null, "options": [], "cues": "Slow and controlled, tight core" }
+      ]
+    },
+    {
+      "day": 6, "type": "cardio", "title": "Cardio", "note": "Outdoors on nice days",
+      "options": ["45-60 min outdoor walk/hike", "45-60 min outdoor cycle", "Yoga or pilates if you enjoy", "Swim, sports with the kids, etc."]
+    },
+    {
+      "day": 7, "type": "active-rest", "title": "Active rest",
+      "guidance": [
+        "Still hitting step goal so taking morning/evening walks, walks after meals, etc.",
+        "Any tightness or soreness? Walking will help, stretch, use a roller, light yoga, etc.",
+        "Journaling, meal prep - anything you need to do to reflect on your progress and to plan ahead for tomorrow"
+      ]
+    }
+  ],
+  "habits": {
+    "trackDaily": true,
+    "steps": { "min": 8000, "max": 10000, "note": "Wear watch if you can or keep phone on you to track." },
+    "hydrationLitres": { "min": 3, "max": 4, "note": "Track with the same water bottle." },
+    "sleepHours": { "min": 7, "max": 8, "note": "Quality over quantity." },
+    "nutrition": {
+      "calorieTarget": null,
+      "note": "Not tracking food or calories. Eat around maintenance (if not more). The old 1700 kcal number is dropped: never show it.",
+      "habits": ["Protein first at every meal", "Carbs up, fats in", "Eat before training", "Eat after training", "Eat regular meals"]
+    }
+  }
+}

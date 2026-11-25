@@ -1,0 +1,61 @@
+/* Design tokens for the Jessie Peters strength app UI overhaul.
+   Values are copied from the approved reference screens in /screens. */
+
+
+:root {
+  /* Colour */
+  --color-ink: #1C1C1E;            /* primary text, primary buttons, active nav */
+  --color-ink-muted: #6E6E73;      /* labels, secondary sentence in headings (4.9:1 on white) */
+  --color-ink-soft: #4A4A4F;       /* secondary text on gradients */
+  --color-surface: #FFFFFF;        /* rows, cards, sheets */
+  --color-surface-muted: #F1F1EF;  /* round buttons, pills, steppers, inputs */
+  --color-surface-quiet: #F4F4F2;  /* unselected option rows inside sheets */
+  --color-canvas: #F2F2F0;         /* page base under the gradient */
+  --color-hairline: #ECEBE8;       /* progress track */
+  --color-sky: #C9D6E8;            /* gradient top */
+  --color-mist: #E1E7F0;           /* gradient middle */
+  --color-peach: #F6CFB2;          /* gradient glow, done ticks, timer ring */
+  --color-peach-tint: #FBE7DA;     /* coach target row, selected option, "New" tag */
+  --color-peach-ink: #5A4A40;      /* text on peach-tint */
+  --color-accent: #E58F66;         /* progress bars, chart line, cue dots */
+
+  /* Backgrounds */
+  --gradient-page: radial-gradient(95% 30% at 50% 26%, #F6CFB2 0%, rgba(246,207,178,0) 72%),
+                   linear-gradient(180deg, #C9D6E8 0%, #E1E7F0 26%, #F2F2F0 52%, #F2F2F0 100%);
+  --gradient-hero: radial-gradient(95% 34% at 50% 30%, #F6CFB2 0%, rgba(246,207,178,0) 72%),
+                   linear-gradient(180deg, #C9D6E8 0%, #E1E7F0 30%, #F2F2F0 58%, #F2F2F0 100%);
+  --scrim-photo: linear-gradient(180deg, rgba(12,10,8,0) 30%, rgba(12,10,8,0.6) 100%);
+
+  /* Type */
+  --font-serif: var(--font-newsreader), Georgia, serif;          /* headings only */
+  --font-sans: var(--font-inter-tight), system-ui, sans-serif;   /* everything else */
+  --text-display: 34px;   /* screen heading, serif 400, line-height 1.1, tracking -0.01em */
+  --text-title: 28px;     /* Today greeting / sheet heading, serif */
+  --text-hero: 32px;      /* title on photo cards, serif */
+  --text-number-xl: 76px; /* rest timer */
+  --text-number-lg: 32px; /* stats */
+  --text-number-md: 28px; /* typed weight / reps */
+  --text-value: 17px;     /* row value, sans 500 */
+  --text-body: 15px;
+  --text-label: 13px;     /* row label, muted */
+  --text-micro: 11px;
+
+  /* Shape */
+  --radius-row: 24px;
+  --radius-card: 26px;
+  --radius-sheet: 32px;
+  --radius-pill: 9999px;
+  --row-gap: 4px;          /* rows stack with a 4px gap, no borders */
+  --page-pad: 20px;
+
+  /* Sizes */
+  --tap-min: 44px;
+  --button-round: 44px;    /* round icon buttons */
+  --button-primary-h: 60px;
+  --nav-h: 64px;           /* floating pill nav, 24px from sides, 20px from bottom */
+
+  /* Elevation (used sparingly) */
+  --shadow-nav: 0 6px 24px rgba(28,28,30,0.10);
+  --shadow-sheet: 0 -8px 30px rgba(28,28,30,0.06);
+}
+

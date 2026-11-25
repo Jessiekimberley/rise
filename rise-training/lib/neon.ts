@@ -1,15 +1,23 @@
 import { neon } from '@neondatabase/serverless';
 import { schema, trainingStore, type Query } from './storage';
 
-let localQuery: Promise<Query> | undefined;
+const devGlobal = globalThis as typeof globalThis & { riseLocalQueries?: Map<string, Promise<Query>> };
 
 function developmentQuery(path: string): Promise<Query> {
-  localQuery ??= import('@electric-sql/pglite').then(async ({ PGlite }) => {
+  // The page and API routes can load separate copies of this module in development.
+  const queries = devGlobal.riseLocalQueries ??= new Map();
+  const existing = queries.get(path);
+  if (existing) return existing;
+  const query = import('@electric-sql/pglite').then(async ({ PGlite }) => {
     const database = new PGlite(path);
     await database.exec(schema);
-    return async (sql, values) => (await database.query<Record<string, unknown>>(sql, values)).rows;
+    return (async (sql, values) => (await database.query<Record<string, unknown>>(sql, values)).rows) satisfies Query;
+  }).catch((error) => {
+    queries.delete(path);
+    throw error;
   });
-  return localQuery;
+  queries.set(path, query);
+  return query;
 }
 
 export function neonQuery() {

@@ -1,0 +1,33 @@
+<!doctype html>
+<html lang="en-NZ">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="theme-color" content="#141a16">
+  <meta name="robots" content="noindex, nofollow">
+  <meta name="description" content="Your Rise workout plan, gym log, and coach check-in.">
+  <title>Rise Gym</title>
+  <link rel="stylesheet" href="style.css">
+  <script src="app.js" type="module"></script>
+</head>
+<body>
+  <header class="masthead">
+    <div class="shell masthead-inner">
+      <a class="brand" href="#workout">RISE<span>.</span></a>
+      <label class="date-picker">Log date <input type="date" id="log-date"></label>
+    </div>
+  </header>
+  <nav class="shell tabs" aria-label="Main navigation">
+    <a href="#workout" aria-current="page">Workout</a>
+    <a href="#habits">Habits</a>
+    <a href="#check-in">Check-in</a>
+  </nav>
+  <main class="shell" id="main"></main>
+  <div class="shell timer" id="timer" hidden>
+    <div><strong id="timer-time" role="timer">0:00</strong><span id="timer-label">Rest</span></div>
+    <button type="button" id="timer-stop" class="button secondary">Cancel</button>
+  </div>
+  <div class="shell notice" id="notice" role="status"></div>
+  <noscript><p class="shell">Enable JavaScript to use your workout log.</p></noscript>
+</body>
+</html>

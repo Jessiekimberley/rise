@@ -20,8 +20,8 @@ export async function POST(request: Request) {
     if (mode === 'programme') {
       const date = todayKey();
       const { data } = await store.load(ownerId);
-      const weeks = await refreshProgramme(config, programmeWeek(date, data.startedOn ?? weekStart(date)));
-      return NextResponse.json(await store.mutate(ownerId, { type: 'docsTarget', mode, target, update: { date, weeks } }));
+      await refreshProgramme(config, programmeWeek(date, data.startedOn ?? weekStart(date)));
+      return NextResponse.json(await store.mutate(ownerId, { type: 'docsTarget', mode, target }));
     }
     await verifyCheckInTarget(config);
     return NextResponse.json(await store.mutate(ownerId, { type: 'docsTarget', mode, target }));

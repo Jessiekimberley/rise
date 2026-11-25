@@ -1,9 +1,12 @@
+import programme from './programme-data.generated.json';
+
 export type Exercise = {
   id: string;
   name: string;
   target: string;
   sets: number;
   rest: number;
+  restNote?: string;
   cue: string;
   metric?: 'seconds' | 'bodyweight';
   perSide?: 'leg' | 'side';
@@ -12,41 +15,75 @@ export type Exercise = {
   coachKg?: number;
 };
 
-export const plans = [
-  { id: 'lower-1', day: 1, name: 'Lower Body I', exercises: [
-    { id: 'leg-press', name: 'Leg Press', sets: 4, target: '8 reps', rest: 120, cue: 'Slow and controlled 3-sec negatives with 1-sec pause at contraction.' },
-    { id: 'rdl', name: 'RDL', variants: ['Barbell', 'Dumbbells'], sets: 3, target: '8–10 reps', rest: 120, cue: 'Slow and controlled with a neutral spine. Keep the weights close to your legs and stop around your kneecaps. Check your form in the mirror, and send Brenna a video if concerned.' },
-    { id: 'leg-extension', name: 'Leg Extensions', sets: 3, target: '12 reps', rest: 90, cue: '3-sec negative and 2-sec pause at the top.' },
-    { id: 'walking-lunge', name: 'Dumbbell Walking Lunges', sets: 3, target: '10 reps per leg', rest: 120, perSide: 'leg', cue: 'Take big steps through a full range with controlled movement. Hold dumbbells at your sides.' },
-    { id: 'plank', name: 'Forearm Plank', sets: 3, target: '30–60 sec', rest: 60, metric: 'seconds', cue: 'Keep your back straight and your hips level. Brace your core.' },
-  ] },
-  { id: 'upper-1', day: 2, name: 'Upper Body I', exercises: [
-    { id: 'lat-pulldown', name: 'Lat Pulldown', variants: ['Wide grip', 'Neutral grip'], sets: 4, target: '8 reps', rest: 120, cue: 'Lean back and engage your core. Squeeze your armpits, pull the bar down to your chest and get a full stretch at the top.' },
-    { id: 'cable-row', name: 'Seated Cable Row', sets: 3, target: '10–12 reps', rest: 90, cue: 'Get a full stretch forward. Drive elbows back down near your hips and squeeze your shoulder blades together at contraction.' },
-    { id: 'hammer-curl', name: 'Dumbbell Hammer Curl', sets: 3, target: '10 reps', rest: 90, cue: 'Move slowly and keep your elbows at your sides. Avoid swinging your arms.' },
-    { id: 'tricep-pushdown', name: 'Cable Tricep Pushdown', sets: 3, target: '10 reps', rest: 90, cue: 'Move slowly and keep your elbows fixed at your sides.' },
-    { id: 'lateral-raise', name: 'Dumbbell Lateral Raises', sets: 3, target: '12–15 reps', rest: 90, cue: 'Use a light weight and move slowly without swinging. Raise at a 45-degree angle and think of lifting from your elbows.' },
-  ] },
-  { id: 'lower-2', day: 4, name: 'Lower Body II', exercises: [
-    { id: 'squat', name: 'Back Squat', variants: ['Barbell', 'Smith machine'], sets: 4, target: '8 reps', rest: 120, cue: 'Heavy but controlled. Only elevate your heels if it helps your form.' },
-    { id: 'hamstring-curl', name: 'Hamstring Curl', variants: ['Seated', 'Lying'], sets: 3, target: '10 reps', rest: 90, cue: 'Big squeeze at contraction with a 3-sec negative.' },
-    { id: 'split-squat', name: 'Dumbbell Bulgarian Split Squat', sets: 3, target: '8 reps per leg', rest: 90, perSide: 'leg', cue: 'Lower slowly and bring your knee toward the floor without resting it. Rest after both legs.' },
-    { id: 'calf-raise', name: 'Standing Calf Raises', variants: ['Dumbbells', 'Smith machine'], sets: 3, target: '12–15 reps', rest: 75, cue: 'Use a controlled 3-sec descent and get a full stretch.' },
-    { id: 'leg-raise', name: 'Lying Leg Raises', sets: 3, target: '12–15 reps', rest: 60, metric: 'bodyweight', cue: 'Move slowly and keep your feet from touching the ground between reps.' },
-  ] },
-  { id: 'upper-2', day: 5, name: 'Upper Body II', exercises: [
-    { id: 'shoulder-press', name: 'Shoulder Press', variants: ['Machine', 'Dumbbells'], sets: 4, target: '8 reps', rest: 120, cue: 'Elbows at 45 degrees. Lower slowly to just past shoulder height.' },
-    { id: 'chest-press', name: 'Chest Press', variants: ['Machine', 'Barbell bench press'], sets: 3, target: '8–10 reps', rest: 120, cue: 'Slow and controlled.' },
-    { id: 'overhead-tricep', name: 'Overhead Tricep Extensions', sets: 3, target: '10–12 reps', rest: 90, cue: 'Set the cable halfway up. Step away, keep your ears tucked between your arms and pull forward above your head.' },
-    { id: 'reverse-pec-deck', name: 'Reverse Pec Deck', sets: 3, target: '12 reps', rest: 90, cue: 'Focus on squeezing your shoulder blades together without taking your arms all the way behind you.' },
-    { id: 'russian-twist', name: 'Russian Twists', sets: 3, target: '10 reps per side', rest: 60, perSide: 'side', cue: 'Slow and controlled with a tight core.' },
-  ] },
-] satisfies Array<{ id: string; day: number; name: string; exercises: Exercise[] }>;
-
 export type Plan = { id: string; day: number; name: string; exercises: Exercise[] };
-export const exercises: Exercise[] = plans.flatMap((plan) => [...plan.exercises] as Exercise[]);
-export const findPlan = (id: string): Plan | undefined => plans.find((plan) => plan.id === id);
-export const findExercise = (id: string) => exercises.find((exercise) => exercise.id === id);
 
-export const restDay = 'Build toward your step goal with walks. For tightness or soreness, Brenna suggests light stretching, foam rolling or yoga.';
-export const cardioDay = 'Brenna suggests a 45–60 minute outdoor walk, hike or cycle. Swimming, sport, yoga or Pilates are also options.';
+const planIds: Record<number, string> = { 1: 'lower-1', 2: 'upper-1', 4: 'lower-2', 5: 'upper-2' };
+// Keep the identifiers used by saved sessions and Google Docs imports.
+const savedIds: Record<string, string> = {
+  'leg-extensions': 'leg-extension',
+  'walking-lunges': 'walking-lunge',
+  'forearm-plank': 'plank',
+  'seated-cable-row': 'cable-row',
+  'lateral-raises': 'lateral-raise',
+  'back-squat': 'squat',
+  'bulgarian-split-squat': 'split-squat',
+  'standing-calf-raises': 'calf-raise',
+  'lying-leg-raises': 'leg-raise',
+  'overhead-tricep-extensions': 'overhead-tricep',
+  'russian-twists': 'russian-twist',
+};
+
+export const programmeDays = programme.days;
+export const habitTargets = programme.habits;
+
+export const plans: Plan[] = programmeDays.flatMap((day) => {
+  if (!day.exercises) return [];
+  return [{
+    id: planIds[day.day], day: day.day, name: day.title,
+    exercises: day.exercises.map((exercise): Exercise => {
+      const [minutes, seconds, ...note] = exercise.rest.split(/[: ]/);
+      const reps = exercise.reps.replace(/(\d)-(\d)/g, '$1–$2');
+      const side = reps.match(/ per (leg|side)$/)?.[1];
+      const weight = exercise.weight;
+      const duration = 'logAs' in exercise && exercise.logAs === 'duration';
+      return {
+        id: savedIds[exercise.id] ?? exercise.id,
+        name: exercise.name,
+        sets: exercise.sets,
+        target: duration ? reps : side ? reps.replace(' per ', ' reps per ') : `${reps} reps`,
+        rest: Number(minutes) * 60 + Number(seconds),
+        restNote: note.join(' ') || undefined,
+        cue: exercise.cues,
+        variants: exercise.options.length ? exercise.options : undefined,
+        metric: duration ? 'seconds' : weight === 'Bodyweight' ? 'bodyweight' : undefined,
+        perSide: side === 'leg' || side === 'side' ? side : undefined,
+        coachWeight: typeof weight === 'string' && weight !== 'Bodyweight' ? weight : undefined,
+        coachKg: typeof weight === 'number' ? weight : undefined,
+      };
+    }),
+  }];
+});
+
+const exercises = plans.flatMap((plan) => plan.exercises);
+export { exercises };
+export const findPlan = (id: string) => plans.find((plan) => plan.id === id);
+export const findExercise = (id: string) => exercises.find((exercise) => exercise.id === id);
+export const dayTitle = (plan: Plan) => findPlan(plan.id)?.name ?? plan.name;
+
+export function prescribedReps(exercise: Exercise) {
+  if (exercise.metric === 'seconds') return;
+  const match = exercise.target.trim().match(/^(\d+)(?:\s*(?:[-–—]|\bto\b)\s*(\d+))?(?:\s+reps?)?(?:\s+per\s+(?:leg|side))?$/i);
+  if (!match) return;
+  const minimum = Number(match[1]);
+  const maximum = Number(match[2] ?? match[1]);
+  return minimum >= 1 && minimum <= maximum && maximum <= 1_000 ? minimum : undefined;
+}
+
+export function canonicalVariant(exerciseId: string, variant: string) {
+  if (exerciseId !== 'calf-raise') return variant;
+  if (variant === 'Dumbbells') return 'Holding dumbbells';
+  if (variant === 'Smith machine') return 'On smith machine';
+  return variant;
+}
+
+export const exerciseOptions = (id: string) => findExercise(id)?.variants ?? [];

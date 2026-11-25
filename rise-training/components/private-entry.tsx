@@ -1,35 +1,37 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 
-export function PrivateEntry({ configured }: { configured: boolean }) {
-  const [status, setStatus] = useState('Open your private link to access your training log.');
+export function PrivateLink({ unlocked }: { unlocked: boolean }) {
+  const [status, setStatus] = useState('');
+  const pending = useRef(false);
   useEffect(() => {
-    if (!configured) return;
-    let pending = false;
     async function openPrivateLink() {
-      const code = new URLSearchParams(window.location.hash.slice(1)).get('access');
-      if (!code || pending) return;
-      pending = true;
-      setStatus('Opening your training log…');
+      const hash = window.location.hash;
+      const code = new URLSearchParams(hash.slice(1)).get('access');
+      if (!code || pending.current) return;
+      const clearCode = () => {
+        if (window.location.hash === hash) {
+          window.history.replaceState(null, '', window.location.pathname + window.location.search);
+        }
+      };
+      if (unlocked) { clearCode(); return; }
+      pending.current = true;
+      setStatus('Connecting your coaching Docs…');
       try {
         const response = await fetch('/api/access', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ code }) });
         if (!response.ok) throw new Error('The private link could not be opened.');
-        window.history.replaceState(null, '', window.location.pathname + window.location.search);
+        clearCode();
         window.location.reload();
       } catch {
-        setStatus('This private link could not be opened. Reopen the full link to try again.');
-        pending = false;
+        setStatus('Coaching Docs access could not be restored. Reopen the original private link to try again.');
+        pending.current = false;
       }
     }
     window.addEventListener('hashchange', openPrivateLink);
     void openPrivateLink();
     return () => window.removeEventListener('hashchange', openPrivateLink);
-  }, [configured]);
+  }, [unlocked]);
 
-  return <main className="entry">
-    <div className="wordmark">rise<span>.</span></div>
-    <h1>Rise Training</h1>
-    <p role="status">{configured ? status : 'Private access setup is pending.'}</p>
-  </main>;
+  return status ? <p className="private-link-status" role="status">{status}</p> : null;
 }

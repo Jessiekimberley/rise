@@ -1,117 +1,27 @@
 'use client';
 
-import { Activity, ArrowUpRight, CalendarDays, Dumbbell, House, NotebookPen, TrendingUp } from 'lucide-react';
-import { useEffect, useRef, useState, type FormEvent } from 'react';
+import { useRouter } from 'next/navigation';
+import { useCallback, useEffect, useRef, useState, type FormEvent } from 'react';
 import { CheckIns } from './check-ins';
 import { Habits } from './habits';
 import { Progress } from './progress';
+import { StepSync } from './step-sync';
+import { Today } from './today';
 import { Workout } from './workout';
-import { addDays, displayDate, programmeDay, restDisplay, trainingWeekStart, weekStart } from '@/lib/insights';
+import { scheduledProgrammeDay, todayKey, weekStart } from '@/lib/insights';
 import { sessionKey, type Command, type TrainingData, type TrainingSnapshot } from '@/lib/model';
-import { cardioDay, plans, restDay } from '@/lib/programme';
-import { availableWeek, programmeWeek, weekPlans } from '@/lib/weeks';
+import { weekPlans } from '@/lib/weeks';
 import { docUrl, type DocTarget } from '@/lib/coach-doc';
-import { scheduleRestChime } from '@/lib/rest-audio';
+import type { ProgrammeReview } from '@/lib/programme-review';
+import { BottomSheet, FloatingNav, HeadingSentence, PageGradient, Pill, PrimaryButton, tabs, type Tab } from './ui';
 
-const tabs = [
-  { id: 'today', label: 'Today', icon: House },
-  { id: 'train', label: 'Train', icon: Dumbbell },
-  { id: 'habits', label: 'Habits', icon: Activity },
-  { id: 'progress', label: 'Progress', icon: TrendingUp },
-  { id: 'check-ins', label: 'Check-ins', icon: NotebookPen },
-] as const;
-type Tab = typeof tabs[number]['id'];
 export type Mutate = (command: Command) => Promise<TrainingSnapshot>;
+type WorkoutSelection = { planId: string; date?: string; previewOnly?: boolean };
 
-function RestTimer({ deadline, stop }: { deadline: number; stop: () => void }) {
-  const [seconds, setSeconds] = useState(() => Math.ceil((deadline - Date.now()) / 1_000));
-  useEffect(() => {
-    const timer = window.setInterval(() => setSeconds(Math.max(0, Math.ceil((deadline - Date.now()) / 1_000))), 200);
-    return () => window.clearInterval(timer);
-  }, [deadline]);
-  return <aside className="rest-timer" aria-label="Rest timer">
-    <div><strong role="timer">{restDisplay(Math.max(0, seconds))}</strong> <span>{seconds > 0 ? 'Rest' : 'Rest complete'}</span></div>
-    <button className="secondary" onClick={stop}>{seconds > 0 ? 'Stop' : 'Dismiss'}</button>
-  </aside>;
-}
-
-function useRest() {
-  const [deadline, setDeadline] = useState(0);
-  const audio = useRef<AudioContext | null>(null);
-  const voices = useRef<OscillatorNode[]>([]);
-
-  function cancel() {
-    for (const voice of voices.current) { try { voice.stop(); } catch { /* The tone has ended. */ } }
-    voices.current = [];
-  }
-
-  function primeAudio() {
-    try {
-      audio.current ??= new AudioContext();
-      if (audio.current.state !== 'running') void audio.current.resume().catch(() => {});
-    } catch { /* A visual countdown is still available. */ }
-  }
-
-  function start(seconds: number) {
-    if (seconds <= 0) return;
-    cancel();
-    setDeadline(Date.now() + seconds * 1_000);
-    const context = audio.current;
-    if (context) voices.current = scheduleRestChime(context, seconds);
-  }
-
-  return { deadline, primeAudio, start, stop: () => { cancel(); setDeadline(0); } };
-}
-
-function Week({ date, data }: { date: string; data: TrainingData }) {
-  const start = trainingWeekStart(date, data.startedOn);
-  const dates = Array.from({ length: 7 }, (_, index) => addDays(start, index));
-  const programme = weekPlans(data, date);
-  const done = new Set(Object.values(data.sessions).filter((session) => session.finishedAt && session.date >= start && session.date <= dates[6]).map((session) => session.planId));
-  return <section className="week-section" aria-label="Weekly strength progress">
-    <div className="section-line"><h2>This week</h2><span>{done.size} of {programme.length} strength sessions</span></div>
-    <ol className="week-track">
-      {dates.map((dayDate, index) => {
-        const any = Object.values(data.sessions).some((session) => session.date === dayDate && session.finishedAt);
-        const scheduled = programme.some((item) => item.day === index + 1);
-        return <li key={dayDate} aria-current={dayDate === date ? 'date' : undefined} className={any ? 'complete' : scheduled ? 'scheduled' : ''}>
-          <span>{displayDate(dayDate, { weekday: 'short' }).slice(0, 2)}</span>
-          <strong aria-label={`${displayDate(dayDate)}, ${any ? 'workout completed' : scheduled ? 'strength planned' : 'no strength planned'}`}>{dayDate.slice(-2).replace(/^0/, '')}</strong>
-        </li>;
-      })}
-    </ol>
-  </section>;
-}
-
-function Dashboard({ date, today, data, onTrain }: { date: string; today: string; data: TrainingData; onTrain: (id: string) => void }) {
-  const day = programmeDay(date, data.startedOn);
-  const programme = weekPlans(data, date, weekStart(today));
-  const week = programmeWeek(date, data.startedOn ?? weekStart(today));
-  const coachWeek = availableWeek(data, date, weekStart(today));
-  const plan = programme.find((item) => item.day === day);
-  const session = plan ? data.sessions[sessionKey(date, plan.id)] : undefined;
-  return <>
-    <div className="eyebrow"><CalendarDays size={16} />{displayDate(date, { weekday: 'long', day: 'numeric', month: 'long' })}</div>
-    <h1 className="page-title">Today</h1>
-    <section className="today-panel">
-      <p className="eyebrow">Week {week} · Day {day} · Brenna’s programme</p>
-      <h2>{plan?.name ?? (day === 6 ? 'Cardio' : 'Active rest')}</h2>
-      <p>{plan ? `${plan.exercises.length} exercises · ${plan.exercises.reduce((sum, item) => sum + item.sets, 0)} planned sets` : day === 6 ? cardioDay : restDay}</p>
-      {plan && <button className="dark-button" onClick={() => onTrain(plan.id)}>{session?.finishedAt ? 'View session' : session ? 'Resume workout' : 'Open workout'}<ArrowUpRight size={18} /></button>}
-    </section>
-    <Week date={date} data={data} />
-    {!!coachWeek?.notes?.length && <section className="coach-notes"><h2>Brenna’s notes · Week {coachWeek.number}</h2>{coachWeek.notes.map((note, index) => <p key={index}>{note}</p>)}</section>}
-    <section className="training-list" aria-label="Strength programme">
-      <div className="section-line"><h2>Strength programme</h2></div>
-      {programme.map((item) => <button className="list-row" key={item.id} onClick={() => onTrain(item.id)}>
-        <span><strong>{item.name}</strong><small>Day {item.day} · {item.exercises.length} exercises</small></span><ArrowUpRight size={20} /></button>)}
-    </section>
-  </>;
-}
-
-function ProgrammeSettings({ data, today, defaults, docsReady, serviceEmail, mutate, refresh, saveDoc }: {
-  data: TrainingData; today: string; defaults?: DocTarget; docsReady: boolean; serviceEmail?: string;
-  mutate: Mutate; refresh: () => Promise<TrainingSnapshot>; saveDoc: (mode: 'programme' | 'checkIns', url: string) => Promise<TrainingSnapshot>;
+function ProgrammeSettings({ data, date, today, defaults, canManageDocs, docsReady, serviceEmail, mutate, changeDate, checkUpdates, saveDoc, close }: {
+  data: TrainingData; date: string; today: string; defaults?: DocTarget; canManageDocs: boolean; docsReady: boolean; serviceEmail?: string;
+  mutate: Mutate; changeDate: (date: string) => void; checkUpdates: () => void;
+  saveDoc: (mode: 'programme' | 'checkIns', url: string) => Promise<TrainingSnapshot>; close: () => void;
 }) {
   const savedStart = data.startedOn ?? weekStart(today);
   const programme = data.docs?.programme ?? defaults;
@@ -121,11 +31,15 @@ function ProgrammeSettings({ data, today, defaults, docsReady, serviceEmail, mut
   const [destination, setDestination] = useState(checkIns ? docUrl(checkIns) : '');
   const [busy, setBusy] = useState(false);
   const [status, setStatus] = useState('');
+  const [error, setError] = useState('');
 
   async function run(action: () => Promise<TrainingSnapshot>, message: string) {
     setBusy(true);
     setStatus('');
-    try { await action(); setStatus(message); } catch { /* The app shows the error. */ } finally { setBusy(false); }
+    setError('');
+    try { await action(); setStatus(message); }
+    catch (reason) { setError(reason instanceof Error ? reason.message : 'Could not save your settings.'); }
+    finally { setBusy(false); }
   }
 
   function linkForm(event: FormEvent<HTMLFormElement>, mode: 'programme' | 'checkIns', url: string) {
@@ -133,93 +47,259 @@ function ProgrammeSettings({ data, today, defaults, docsReady, serviceEmail, mut
     void run(() => saveDoc(mode, url), 'Google Doc saved.');
   }
 
-  return <details className="settings"><summary>Programme settings</summary>
+  return <BottomSheet labelId="settings-heading" onClose={() => { if (!busy) close(); }} className="settings-sheet">
+    <HeadingSentence id="settings-heading" className="heading-small" lead="Programme settings." />
+    <label className="input-group"><span>Log date</span>
+      <input type="date" value={date} max={today} required onChange={(event) => {
+        if (event.currentTarget.validity.valid && event.currentTarget.value) changeDate(event.currentTarget.value);
+      }} />
+    </label>
     <form onSubmit={(event) => { event.preventDefault(); void run(() => mutate({ type: 'programmeStart', date: start }), 'Programme start saved.'); }}>
-      <label className="input-group"><span>Programme start date</span><input aria-label="Programme start date" type="date" max={today} required value={start} onChange={(event) => setStart(event.target.value)} /></label>
-      <button className="secondary" disabled={busy || start === savedStart}>Save start date</button>
+      <label className="input-group"><span>Programme start date</span><input type="date" max={today} required value={start} onChange={(event) => setStart(event.target.value)} /></label>
+      <button className="pill" disabled={busy || start === savedStart}>Save start date</button>
     </form>
-    <div className="section-line"><h2>Coaching Docs</h2>{programme && <a href={docUrl(programme)} target="_blank" rel="noreferrer">Open programme Doc</a>}</div>
-    {serviceEmail && <p className="fine">Share a new Doc with <strong>{serviceEmail}</strong>. Give it view access for the programme or edit access for check-ins.</p>}
-    <form onSubmit={(event) => linkForm(event, 'programme', source)}>
-      <label className="input-group"><span>Programme Doc link</span><input type="url" required value={source} onChange={(event) => setSource(event.target.value)} /></label>
-      <button className="secondary" disabled={!docsReady || busy || source === (programme ? docUrl(programme) : '')}>Save programme Doc</button>
-    </form>
-    <form onSubmit={(event) => linkForm(event, 'checkIns', destination)}>
-      <label className="input-group"><span>Check-in Doc link</span><input type="url" required value={destination} onChange={(event) => setDestination(event.target.value)} /></label>
-      <button className="secondary" disabled={!docsReady || busy || destination === (checkIns ? docUrl(checkIns) : '')}>Save check-in Doc</button>
-    </form>
-    <button type="button" className="secondary" disabled={!docsReady || busy} onClick={() => void run(refresh, 'Programme refreshed from Google Docs.')}>Refresh Brenna’s programme</button>
-    <p role="status" className="fine">{docsReady ? status : 'Google Docs setup is pending.'}</p>
-  </details>;
+    {canManageDocs && <>
+      <div className="section-line"><h2>Coaching Docs</h2>{programme && <Pill href={docUrl(programme)}>Open programme Doc</Pill>}</div>
+      {serviceEmail && <p className="fine">Share a new Doc with <strong>{serviceEmail}</strong>. Give it view access for the programme or edit access for check-ins.</p>}
+      <form onSubmit={(event) => linkForm(event, 'programme', source)}>
+        <label className="input-group"><span>Programme Doc link</span><input type="url" required value={source} onChange={(event) => setSource(event.target.value)} /></label>
+        <button className="pill" disabled={!docsReady || busy || source === (programme ? docUrl(programme) : '')}>Save programme Doc</button>
+      </form>
+      <form onSubmit={(event) => linkForm(event, 'checkIns', destination)}>
+        <label className="input-group"><span>Check-in Doc link</span><input type="url" required value={destination} onChange={(event) => setDestination(event.target.value)} /></label>
+        <button className="pill" disabled={!docsReady || busy || destination === (checkIns ? docUrl(checkIns) : '')}>Save check-in Doc</button>
+      </form>
+    </>}
+    {error && <p className="notice" role="alert">{error}</p>}
+    <p role="status" className="fine">{status || (canManageDocs && !docsReady ? 'Google Docs setup is pending.' : '')}</p>
+    {canManageDocs && <Pill disabled={!docsReady || !programme || busy} onClick={checkUpdates}>Check for programme updates</Pill>}
+    <PrimaryButton onClick={close} disabled={busy}>Done</PrimaryButton>
+  </BottomSheet>;
 }
 
-export function TrainingApp({ initial, today, configuredDoc, docsReady, serviceEmail }: {
-  initial: TrainingSnapshot; today: string; configuredDoc?: DocTarget; docsReady: boolean; serviceEmail?: string;
+function ReviewSheet({ result, checking, applying, error, status, close, check, apply }: {
+  result?: ProgrammeReview; checking: boolean; applying: boolean; error: string; status: string;
+  close: () => void; check: () => void; apply: () => void;
 }) {
-  const [snapshot, setSnapshot] = useState(initial);
+  return <BottomSheet labelId="review-heading" className="review-sheet" onClose={() => { if (!applying) close(); }}>
+    <HeadingSentence id="review-heading" className="heading-small" lead="Programme updates." />
+    <p className="fine">Applied changes take effect in workouts you haven’t started. Started workouts keep their original prescriptions.</p>
+    {checking && <p role="status">Checking Brenna’s Google Doc…</p>}
+    {error && <p className="notice" role="alert">{error}</p>}
+    {status && <p role="status">{status}</p>}
+    {result && !checking && (result.changes.length ? <div className="row-stack">
+      {result.changes.map((change, index) => <details className="programme-change" key={index}>
+        <summary><small>Week {change.week}{change.day && ` · Day ${change.day}`}</small><strong>{change.exercise}</strong></summary>
+        <dl><dt>Current programme</dt><dd>{change.before || '—'}</dd><dt>From Google Docs</dt><dd>{change.after || '—'}</dd></dl>
+      </details>)}
+    </div> : !status && <p role="status">Your programme is up to date.</p>)}
+    {result?.changes.length ? <PrimaryButton onClick={apply} disabled={checking || applying || !!error}>{applying ? 'Applying…' : 'Apply these updates'}</PrimaryButton>
+      : <PrimaryButton onClick={close} disabled={applying}>Done</PrimaryButton>}
+    {error && <Pill onClick={check} disabled={checking || applying}>Check again</Pill>}
+    {!!result?.changes.length && <Pill onClick={close} disabled={applying}>Decide later</Pill>}
+  </BottomSheet>;
+}
+
+function tabFromHash(): Tab {
+  return tabs.find((tab) => `#${tab.id}` === window.location.hash)?.id ?? 'today';
+}
+
+function workoutFor(date: string, data: TrainingData) {
+  const active = Object.values(data.sessions).filter((session) => session.date === date && !session.finishedAt)
+    .sort((a, b) => b.startedAt.localeCompare(a.startedAt))[0];
+  return active?.planId ?? weekPlans(data, date).find((plan) => plan.day === scheduledProgrammeDay(date, data))?.id ?? '';
+}
+
+async function post(path: string, body: unknown) {
+  const response = await fetch(path, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
+  const result = await response.json().catch(() => ({}));
+  if (!response.ok) throw new Error(result.error ?? 'Could not save. Try again.');
+  return result;
+}
+
+export function TrainingApp({ initial, today: initialToday, configuredDoc, canManageDocs, docsReady, serviceEmail, firstName, initials, coachText }: {
+  initial: TrainingSnapshot; today: string; configuredDoc?: DocTarget; canManageDocs: boolean; docsReady: boolean; serviceEmail?: string;
+  firstName: string; initials: string; coachText?: string;
+}) {
+  const router = useRouter();
+  const [savedSnapshot, setSavedSnapshot] = useState<TrainingSnapshot>();
+  const snapshot = savedSnapshot && savedSnapshot.revision > initial.revision ? savedSnapshot : initial;
   const [tab, setTab] = useState<Tab>('today');
-  const [date, setDate] = useState(today);
-  const [planId, setPlanId] = useState<string>(() => plans.find((item) => item.day === programmeDay(today, initial.data.startedOn))?.id ?? plans[0].id);
-  const [notice, setNotice] = useState('');
-  const rest = useRest();
-  const didRefresh = useRef(false);
+  const [today, setToday] = useState(initialToday);
+  const [logDate, setLogDate] = useState<string>();
+  const [workout, setWorkout] = useState<WorkoutSelection>();
+  const [focused, setFocused] = useState(false);
+  const [settings, setSettings] = useState(false);
+  const [stepSyncOpen, setStepSyncOpen] = useState(false);
+  const [reviewOpen, setReviewOpen] = useState(false);
+  const [review, setReview] = useState<ProgrammeReview>();
+  const [reviewError, setReviewError] = useState('');
+  const [reviewStatus, setReviewStatus] = useState('');
+  const [checking, setChecking] = useState(false);
+  const [applying, setApplying] = useState(false);
+  const lastCheck = useRef(0);
+  const checkingRef = useRef(false);
+
+  const data = snapshot.data;
+  const date = logDate ?? today;
+  const fixedWorkoutDate = workout ? workout.date : logDate;
+  const workoutDate = fixedWorkoutDate ?? today;
+  const planId = workout?.planId ?? workoutFor(workoutDate, data);
+  const source = data.docs?.programme ?? configuredDoc;
+  const sourceKey = source ? docUrl(source) : '';
+  const check = useCallback(async () => {
+    if (checkingRef.current) return;
+    checkingRef.current = true;
+    lastCheck.current = Date.now();
+    setChecking(true);
+    setReviewError('');
+    setReviewStatus('');
+    try {
+      const result: ProgrammeReview = await post('/api/programme/refresh', {});
+      setReview(result);
+    } catch (reason) {
+      setReviewError(reason instanceof Error ? reason.message : 'Could not check for updates.');
+    } finally {
+      checkingRef.current = false;
+      setChecking(false);
+    }
+  }, []);
 
   useEffect(() => {
-    const week = programmeWeek(today, initial.data.startedOn ?? weekStart(today));
-    if (!docsReady || didRefresh.current || initial.data.weeks?.[week]) return;
-    didRefresh.current = true;
-    void fetch('/api/programme/refresh', { method: 'POST' }).then(async (response) => {
-      if (!response.ok) return;
-      const fresh = await response.json() as TrainingSnapshot;
-      setSnapshot((current) => fresh.revision >= current.revision ? fresh : current);
-    }).catch(() => {});
-  }, [docsReady, initial, today]);
+    function sync() {
+      const current = tabFromHash();
+      setTab(current);
+      setWorkout(current === 'train' ? window.history.state?.riseWorkout : undefined);
+      setFocused(false);
+    }
+    sync();
+    window.addEventListener('popstate', sync);
+    window.addEventListener('hashchange', sync);
+    return () => {
+      window.removeEventListener('popstate', sync);
+      window.removeEventListener('hashchange', sync);
+    };
+  }, []);
+
+  useEffect(() => {
+    function refreshLog() {
+      if (document.visibilityState === 'visible') router.refresh();
+    }
+    document.addEventListener('visibilitychange', refreshLog);
+    return () => document.removeEventListener('visibilitychange', refreshLog);
+  }, [router]);
+
+  useEffect(() => {
+    let timer: number;
+    function refreshDate() {
+      window.clearTimeout(timer);
+      setToday(todayKey());
+      timer = window.setTimeout(refreshDate, 60_000 - Date.now() % 60_000);
+    }
+    refreshDate();
+    window.addEventListener('focus', refreshDate);
+    document.addEventListener('visibilitychange', refreshDate);
+    return () => {
+      window.clearTimeout(timer);
+      window.removeEventListener('focus', refreshDate);
+      document.removeEventListener('visibilitychange', refreshDate);
+    };
+  }, []);
+
+  useEffect(() => {
+    if (!docsReady || !sourceKey) return;
+    void check();
+    function refreshOnReturn() {
+      if (document.visibilityState === 'visible' && Date.now() - lastCheck.current > 300_000) void check();
+    }
+    document.addEventListener('visibilitychange', refreshOnReturn);
+    return () => document.removeEventListener('visibilitychange', refreshOnReturn);
+  }, [docsReady, sourceKey, check]);
 
   async function request(path: string, body: unknown) {
-    setNotice('');
+    const saved: TrainingSnapshot = await post(path, body);
+    setSavedSnapshot((current) => !current || saved.revision >= current.revision ? saved : current);
+    return saved;
+  }
+
+  async function applyUpdates() {
+    if (!review?.changes.length || checking || applying) return;
+    setApplying(true);
+    setReviewError('');
     try {
-      const response = await fetch(path, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
-      const result = await response.json();
-      if (!response.ok) throw new Error(result.error ?? 'Could not save. Try again.');
-      const saved = result as TrainingSnapshot;
-      setSnapshot((current) => saved.revision >= current.revision ? saved : current);
-      return saved;
-    } catch (error) {
-      const message = error instanceof Error ? error.message : 'Could not save. Try again.';
-      setNotice(message);
-      throw new Error(message);
-    }
+      await request('/api/programme/refresh', { approve: review.fingerprint });
+      setReview(undefined);
+      setReviewStatus('Programme updates applied.');
+    } catch (reason) {
+      setReviewError(reason instanceof Error ? reason.message : 'Could not apply the updates. Try again.');
+    } finally { setApplying(false); }
   }
 
   const mutate: Mutate = (command) => request('/api/training', command);
-  const data = snapshot.data;
-  function navigate(to: Tab) {
-    setNotice('');
+  function navigate(to: Tab, selected?: WorkoutSelection) {
     setTab(to);
+    setWorkout(selected);
+    setFocused(false);
+    const state = { ...window.history.state, riseWorkout: selected };
+    if (window.location.hash !== `#${to}`) window.history.pushState(state, '', `#${to}`);
+    else window.history.replaceState(state, '');
     window.scrollTo(0, 0);
   }
-  function openWorkout(id: string) { setPlanId(id); navigate('train'); }
-  function changeDate(input: HTMLInputElement) { if (input.validity.valid && input.value) setDate(input.value); }
 
-  return <>
-    <header className="app-header"><div className="shell flex items-center justify-between">
-      <button type="button" className="wordmark" onClick={() => navigate('today')} aria-label="Rise Training home">rise<span>.</span></button>
-      <label className="date-control"><CalendarDays size={16} aria-hidden="true" /><span className="sr-only">Log date</span>
-        <input aria-label="Log date" type="date" value={date} max={today} onInput={(event) => changeDate(event.currentTarget)} onChange={(event) => changeDate(event.currentTarget)} />
-      </label>
-    </div></header>
-    <main className="shell app-body" id="main-content">
-      {notice && <p className="notice" role="alert">{notice}</p>}
-      {tab === 'today' && <><Dashboard date={date} today={today} data={data} onTrain={openWorkout} /><ProgrammeSettings data={data} today={today} defaults={configuredDoc} docsReady={docsReady} serviceEmail={serviceEmail} mutate={mutate}
-        refresh={() => request('/api/programme/refresh', {})} saveDoc={(mode, url) => request('/api/programme/doc-target', { mode, url })} /></>}
-      {tab === 'train' && <Workout key={`${date}:${planId}`} date={date} planId={planId} onPlan={setPlanId} data={data} mutate={mutate} startRest={rest.start} primeAudio={rest.primeAudio} />}
-      {tab === 'habits' && <Habits key={date} date={date} data={data} mutate={mutate} />}
-      {tab === 'progress' && <Progress data={data} />}
-      {tab === 'check-ins' && <CheckIns key={date} date={date} data={data} mutate={mutate} destination={data.docs?.checkIns ?? configuredDoc} publish={(id) => request('/api/check-in/publish', { id })} />}
+  function selectWorkout(selected: WorkoutSelection) {
+    setWorkout(selected);
+    window.history.replaceState({ ...window.history.state, riseWorkout: selected }, '');
+  }
+
+  function openWorkout(id: string, selected: string) {
+    setToday(todayKey());
+    navigate('train', { planId: id, date: selected, previewOnly: selected !== logDate });
+  }
+
+  function pinWorkout(id: string) {
+    const current = todayKey();
+    setToday(current);
+    if (workoutDate > current || (workoutDate !== current && !data.sessions[sessionKey(workoutDate, id)] && workoutDate !== logDate)) return false;
+    selectWorkout({ planId: id, date: workoutDate, previewOnly: workoutDate !== logDate });
+    return true;
+  }
+
+  function changeDate(selected: string) {
+    setLogDate(selected === today ? undefined : selected);
+    setWorkout(undefined);
+  }
+
+  function openReview(force = false) {
+    setSettings(false);
+    setReviewOpen(true);
+    if (force || !review || reviewError) void check();
+  }
+
+  return <PageGradient className={tab === 'today' ? 'page-today' : ''}>
+    <main id="main-content">
+      {tab === 'today' && <Today key={`${date}:${data.startedOn}`} date={date} today={today} data={data} firstName={firstName} initials={initials} openWorkout={openWorkout} openHabits={() => navigate('habits')}
+        openCheckIn={() => navigate('check-ins')} openSettings={() => setSettings(true)}
+        reviewLabel={review?.changes.length ? 'Review programme changes' : reviewError ? 'Check programme updates' : undefined} openReview={() => openReview()} />}
+      {tab === 'train' && <Workout key={`${workoutDate}:${planId}`} date={workoutDate} today={today} planId={planId} data={data} coachText={coachText}
+        previewOnly={workout?.previewOnly} onOpen={pinWorkout} onLogToday={(id) => openWorkout(id, today)}
+        onPlan={(id) => selectWorkout({ ...workout, planId: id, date: fixedWorkoutDate })}
+        mutate={mutate} onBack={() => navigate('today')} setFocused={setFocused} />}
+      {tab === 'habits' && <Habits date={date} steps={data.habits[date]?.steps}
+        openStepSync={() => setStepSyncOpen(true)} />}
+      {tab === 'progress' && <Progress data={data} date={date} openWorkout={openWorkout} />}
+      {tab === 'check-ins' && <CheckIns key={date} date={date} data={data} mutate={mutate} canManageDocs={canManageDocs} docsReady={docsReady}
+        destination={data.docs?.checkIns ?? configuredDoc} publish={(id) => request('/api/check-in/publish', { id })} setFocused={setFocused} done={() => navigate('today')} />}
     </main>
-    {rest.deadline > 0 && <RestTimer key={rest.deadline} deadline={rest.deadline} stop={rest.stop} />}
-    <nav className="bottom-nav" aria-label="Main navigation"><div className="shell nav-grid">
-      {tabs.map(({ id, label, icon: Icon }) => <button type="button" key={id} onClick={() => navigate(id)} aria-current={tab === id ? 'page' : undefined}><Icon size={21} strokeWidth={1.8} aria-hidden="true" /><span>{label}</span></button>)}
-    </div></nav>
-  </>;
+    {!focused && <FloatingNav tab={tab} onNavigate={(to) => {
+      if (to === tab) { window.scrollTo(0, 0); return; }
+      if (to === 'train') setToday(todayKey());
+      navigate(to);
+    }} />}
+    {settings && <ProgrammeSettings data={data} date={date} today={today} defaults={configuredDoc} canManageDocs={canManageDocs} docsReady={docsReady} serviceEmail={serviceEmail} mutate={mutate}
+      close={() => setSettings(false)} changeDate={changeDate} checkUpdates={() => openReview(true)}
+      saveDoc={(mode, url) => request('/api/programme/doc-target', { mode, url })} />}
+    {stepSyncOpen && <StepSync unlocked={canManageDocs} close={() => setStepSyncOpen(false)} />}
+    {reviewOpen && <ReviewSheet result={review} checking={checking} applying={applying} error={reviewError} status={reviewStatus}
+      close={() => setReviewOpen(false)} check={() => void check()} apply={() => void applyUpdates()} />}
+  </PageGradient>;
 }

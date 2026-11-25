@@ -12,6 +12,13 @@ export const schema = `
 type Result = Record<string, unknown>;
 export type Query = (text: string, values?: unknown[]) => Promise<Result[]>;
 
+export function trainingLogView(snapshot: TrainingSnapshot, canManageDocs: boolean): TrainingSnapshot {
+  if (canManageDocs) return snapshot;
+  const { docs, checkIns, ...data } = snapshot.data;
+  const sharedCheckIns = Object.fromEntries(Object.entries(checkIns).map(([id, { publishTarget, ...checkIn }]) => [id, checkIn]));
+  return { ...snapshot, data: { ...data, checkIns: sharedCheckIns } };
+}
+
 export function trainingStore(query: Query) {
   async function load(userId: string): Promise<TrainingSnapshot> {
     const [row] = await query('SELECT state, revision FROM rise_training_logs WHERE user_id = $1', [userId]);
