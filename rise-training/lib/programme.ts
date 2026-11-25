@@ -18,6 +18,7 @@ export type Exercise = {
   rpeTarget?: number | null;
   coachNote?: string;
   progression?: string;
+  video?: string;
 };
 
 export type Plan = { id: string; day: number; name: string; exercises: Exercise[] };
@@ -33,6 +34,7 @@ const savedIds: Record<string, string> = {
   'back-squat': 'squat',
   'bulgarian-split-squat': 'split-squat',
   'standing-calf-raises': 'calf-raise',
+  'cable-crunches': 'cable-crunch',
   'lying-leg-raises': 'leg-raise',
   'overhead-tricep-extensions': 'overhead-tricep',
   'russian-twists': 'russian-twist',
@@ -70,6 +72,7 @@ export const plans: Plan[] = programmeDays.flatMap((day) => {
         perSide: side === 'leg' || side === 'side' ? side : undefined,
         coachWeight: typeof weight === 'string' && weight !== 'Bodyweight' ? weight : undefined,
         coachKg: typeof weight === 'number' ? weight : undefined,
+        video: 'video' in exercise && typeof exercise.video === 'string' ? exercise.video : undefined,
       };
     }),
   }];

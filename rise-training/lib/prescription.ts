@@ -61,6 +61,7 @@ const exerciseSchema = z.object({
   rpeTarget: z.number().int().min(1).max(10).nullable().optional(),
   coachNote: z.string().max(2_000).optional(),
   progression: z.string().max(2_000).optional(),
+  video: z.string().trim().max(300).regex(/^https:\/\/\S+$/).optional(),
 });
 
 const daySchema = z.object({
@@ -126,6 +127,7 @@ export type ExerciseDraft = {
   coachNote: string;
   progression: string;
   variants: string;
+  video?: string;
 };
 export type DayDraft = {
   id: string;
@@ -254,6 +256,7 @@ function toExerciseDraft(exercise: Exercise): ExerciseDraft {
     coachNote: exercise.coachNote ?? '',
     progression: exercise.progression ?? '',
     variants: exercise.variants?.join(', ') ?? '',
+    video: exercise.video,
   };
 }
 
@@ -296,7 +299,14 @@ function cleanExercise(exercise: Exercise): Exercise {
   if (exercise.rpeTarget != null) next.rpeTarget = exercise.rpeTarget;
   if (cleanText(exercise.coachNote)) next.coachNote = cleanText(exercise.coachNote);
   if (cleanText(exercise.progression)) next.progression = cleanText(exercise.progression);
+  const video = httpsLink(exercise.video);
+  if (video) next.video = video;
   return next;
+}
+
+function httpsLink(value: string | undefined) {
+  const trimmed = value?.trim();
+  return trimmed && trimmed.length <= 300 && /^https:\/\/\S+$/.test(trimmed) ? trimmed : undefined;
 }
 
 function cleanDay(day: ProgrammeDay): ProgrammeDay {
@@ -396,6 +406,7 @@ function exerciseFromDraft(day: string, exercise: ExerciseDraft): Exercise | { o
     warmupSets: warmup, restNote: exercise.restNote, metric, perSide,
     variants, coachWeight: kilograms == null ? weight : undefined, coachKg: kilograms,
     rirTarget: rir, rpeTarget: rpe, coachNote: exercise.coachNote, progression: exercise.progression,
+    video: exercise.video,
   });
 }
 
@@ -422,6 +433,7 @@ function exerciseDetail(before: Exercise, after: Exercise) {
   if ((before.coachNote ?? '') !== (after.coachNote ?? '')) bits.push('coaching note updated');
   if ((before.progression ?? '') !== (after.progression ?? '')) bits.push('progression updated');
   if ((before.variants ?? []).join('|') !== (after.variants ?? []).join('|')) bits.push('equipment options updated');
+  if ((before.video ?? '') !== (after.video ?? '')) bits.push('form video updated');
   return bits;
 }
 

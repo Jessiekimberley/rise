@@ -129,6 +129,7 @@ function Cues({ exercise, variant, back }: {
         <h2 className="fine">Technique</h2>
         {cues.length ? <ul>{cues.map((cue, index) => <li key={index}>{cue[0].toUpperCase() + cue.slice(1)}</li>)}</ul>
           : <p>No technique notes in the programme yet.</p>}
+        {exercise.video && <a className="pill cue-video" href={exercise.video} target="_blank" rel="noopener noreferrer" aria-label="Form video, opens in a new tab">Form video</a>}
       </section>
       {exercise.coachNote && <section className="cues-block" aria-label="Coaching note"><h2 className="fine">Coaching note</h2><p>{exercise.coachNote}</p></section>}
       {exercise.progression && <section className="cues-block" aria-label="Progression"><h2 className="fine">Progression</h2><p>{exercise.progression}</p></section>}
@@ -316,6 +317,7 @@ export function Workout({ date, today, planId, onPlan, onOpen, onLogToday, data,
       coachNote: exercise.coachNote || original.coachNote, progression: exercise.progression || original.progression,
       rirTarget: exercise.rirTarget ?? original.rirTarget, rpeTarget: exercise.rpeTarget ?? original.rpeTarget,
       warmupSets: exercise.warmupSets ?? original.warmupSets,
+      video: exercise.video || (exercise.id === original.id ? original.video : undefined),
     };
     const activeNumber = slots.indexOf(slot) + 1;
     const commandSlot = { date, planId: plan.id, slotId: original.id };

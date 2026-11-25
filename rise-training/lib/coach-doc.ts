@@ -27,6 +27,7 @@ const knownNames: Record<string, string> = {
   'tricep-pushdown-on-cable': 'tricep-pushdown', 'barbell-or-smith-machine-back-squat': 'squat',
   'seated-or-lying-hamstring-curl': 'hamstring-curl', 'bulgarian-split-squat-with-dumbbells': 'split-squat',
   'standing-calf-raises-holding-dumbbells-or-on-smith-machine': 'calf-raise',
+  'cable-crunches': 'cable-crunch',
   'shoulder-press-machine-or-dumbbells': 'shoulder-press', 'chest-press-machine-or-barbell-bench-press': 'chest-press',
   'reverse-pec-deck-rear-delts': 'reverse-pec-deck',
 };
@@ -50,6 +51,7 @@ function parseRow(row: string[], baseline: Plan): Exercise | undefined {
     metric, perSide: side === 'leg' || side === 'side' ? side : undefined, variants: known?.variants,
     coachWeight: !coachWeight || /^(?:bodyweight|\(.*\))$/i.test(coachWeight) ? undefined : coachWeight,
     coachKg: number ? Number(number[1]) : undefined,
+    ...(known?.video ? { video: known.video } : {}),
   };
 }
 

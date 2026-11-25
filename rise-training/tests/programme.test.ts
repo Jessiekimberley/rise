@@ -17,6 +17,20 @@ function saved(days: ProgrammeDay[] = baselineDays(), effectiveFrom = '2026-11-2
   return { type: 'save' as const, id: saveId, effectiveFrom, deload: false, weekNote: '', days, habits };
 }
 
+test('Brenna’s latest programme replaces calf raises and keeps the split-squat form video', () => {
+  const lower = plans.find((plan) => plan.id === 'lower-2');
+  assert.deepEqual(lower?.exercises.map((exercise) => exercise.id), ['squat', 'hamstring-curl', 'split-squat', 'cable-crunch', 'leg-raise']);
+  const crunch = lower?.exercises.find((exercise) => exercise.id === 'cable-crunch');
+  assert.equal(crunch?.sets, 3);
+  assert.equal(crunch?.target, '10 reps');
+  assert.equal(crunch?.rest, 90);
+  assert.equal(lower?.exercises.find((exercise) => exercise.id === 'split-squat')?.video, 'https://youtube.com/shorts/uBSoEWZu07k');
+  const days = baselineDays();
+  assert.equal(days.find((day) => day.day === 3)?.guidance?.[0], 'BFT class or 20 min run');
+  assert.equal(days.find((day) => day.day === 7)?.guidance?.[0], 'BFT class or 20 min run');
+  assert.deepEqual(days.find((day) => day.day === 6)?.options?.slice(0, 2), ['20-30 min run', 'BFT class']);
+});
+
 test('the editor round-trips the current programme without inventing changes', () => {
   const days = baselineDays();
   const draft = fromDraft(toDraft(days), '8000', '10000', staticHabits());

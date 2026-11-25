@@ -30,6 +30,7 @@
     {
       "day": 3, "type": "active-rest", "title": "Active rest",
       "guidance": [
+        "BFT class or 20 min run",
         "Still hitting step goal so taking morning/evening walks, walks after meals, etc.",
         "Any tightness or soreness? Walking will help, stretch, use a roller, light yoga, etc.",
         "Journaling, meal prep - anything you need to do to reflect on your progress and to plan ahead for tomorrow"
@@ -40,8 +41,8 @@
       "exercises": [
         { "id": "back-squat", "name": "Back squat", "sets": 4, "reps": "8", "rest": "2:00", "weight": null, "options": ["Barbell", "Smith machine"], "cues": "No heel elevation here unless you find it is better for your form. Heavy but controlled." },
         { "id": "hamstring-curl", "name": "Hamstring curl", "sets": 3, "reps": "10", "rest": "1:30", "weight": null, "options": ["Seated", "Lying"], "cues": "Big squeeze at contraction, 3-sec negative" },
-        { "id": "bulgarian-split-squat", "name": "Bulgarian split squat with dumbbells", "sets": 3, "reps": "8 per leg", "rest": "1:30 after both legs done", "weight": null, "options": [], "cues": "Slow and controlled, stretch all the way down knee to floor without resting it" },
-        { "id": "standing-calf-raises", "name": "Standing calf raises", "sets": 3, "reps": "12-15", "rest": "1:15", "weight": null, "options": ["Holding dumbbells", "On smith machine"], "cues": "Controlled descent, get that full stretch 3-sec negative" },
+        { "id": "bulgarian-split-squat", "name": "Bulgarian split squat with dumbbells", "sets": 3, "reps": "8 per leg", "rest": "1:30 after both legs done", "weight": null, "options": [], "cues": "Slow and controlled, stretch all the way down knee to floor without resting it", "video": "https://youtube.com/shorts/uBSoEWZu07k" },
+        { "id": "cable-crunches", "name": "Cable crunches", "sets": 3, "reps": "10", "rest": "1:30", "weight": null, "options": [], "cues": "Slow and controlled, 1-sec pause at contraction, slow to stretch, keep core engaged whole time" },
         { "id": "lying-leg-raises", "name": "Lying Leg raises", "sets": 3, "reps": "12-15", "rest": "1:00", "weight": "Bodyweight", "options": [], "cues": "Slow and controlled, don't let feet touch the ground in between" }
       ]
     },
@@ -57,11 +58,12 @@
     },
     {
       "day": 6, "type": "cardio", "title": "Cardio", "note": "Outdoors on nice days",
-      "options": ["45-60 min outdoor walk/hike", "45-60 min outdoor cycle", "Yoga or pilates if you enjoy", "Swim, sports with the kids, etc."]
+      "options": ["20-30 min run", "BFT class", "45-60 min outdoor walk/hike", "45-60 min outdoor cycle", "Yoga or pilates if you enjoy", "Swim, sports with the kids, etc."]
     },
     {
       "day": 7, "type": "active-rest", "title": "Active rest",
       "guidance": [
+        "BFT class or 20 min run",
         "Still hitting step goal so taking morning/evening walks, walks after meals, etc.",
         "Any tightness or soreness? Walking will help, stretch, use a roller, light yoga, etc.",
         "Journaling, meal prep - anything you need to do to reflect on your progress and to plan ahead for tomorrow"
