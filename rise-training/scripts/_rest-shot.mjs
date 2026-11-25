@@ -69,19 +69,13 @@ try {
   console.log('LABELS', JSON.stringify(labels));
 
   const opened = await evalJs(`(() => {
-    const click = (match) => {
-      const node = [...document.querySelectorAll('button, a')].find((item) => match(item.innerText.trim()) && !item.disabled);
-      if (!node) return false;
-      node.click();
-      return node.innerText.trim();
-    };
-    return click((text) => text.startsWith('Continue with ')) || click((text) => text === 'Start workout') || 'none';
+    const node = [...document.querySelectorAll('button')].find((item) => item.innerText.trim().startsWith('Continue with ') && !item.disabled);
+    if (!node) return 'none';
+    node.click();
+    return node.innerText.trim();
   })()`);
   console.log('OPENED', opened);
-  if (opened === 'Start workout') {
-    console.log('Started a workout to reach the timer. It can be discarded from Workout options.');
-    await sleep(1200);
-  } else await sleep(800);
+  await sleep(800);
 
   const rested = await evalJs(`(() => {
     const node = [...document.querySelectorAll('button')].find((item) => /rest$/i.test(item.innerText.trim()) && !item.disabled);
