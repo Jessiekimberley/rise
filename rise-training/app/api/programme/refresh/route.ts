@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server';
-import { hasAccess, isSameOrigin, ownerId } from '@/lib/access';
+import { isSameOrigin, ownerId } from '@/lib/access';
 import { docsConfiguration, refreshProgramme } from '@/lib/google';
 import { todayKey, weekStart } from '@/lib/insights';
 import { productionStore } from '@/lib/neon';
@@ -10,7 +10,7 @@ import { z } from 'zod';
 const inputSchema = z.object({ approve: z.string().regex(/^[a-f0-9]{64}$/).optional() });
 
 export async function POST(request: Request) {
-  if (!isSameOrigin(request) || !await hasAccess()) return NextResponse.json({ error: 'Open your private Rise link again.' }, { status: 403 });
+  if (!isSameOrigin(request)) return NextResponse.json({ error: 'Open Rise Training to update the programme.' }, { status: 403 });
   const input = inputSchema.safeParse(await request.json().catch(() => ({})));
   if (!input.success) return NextResponse.json({ error: 'Open the programme review and try again.' }, { status: 400 });
   try {

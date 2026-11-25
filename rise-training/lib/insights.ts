@@ -110,15 +110,5 @@ export function buildReport(data: TrainingData, kind: 'midweek' | 'weekly', star
     }
     if (details.length) lines.push(`${displayDate(session.date)} · ${session.plan?.name ?? findPlan(session.planId)?.name ?? session.planId}${session.finishedAt ? '' : ' (in progress)'}\n${details.join('\n')}`);
   }
-
-  const habits = Object.entries(data.habits).filter(([key]) => key >= start && key <= end).sort(([a], [b]) => a.localeCompare(b));
-  for (const [key, day] of habits) {
-    const entries = [day.steps !== null && `${day.steps.toLocaleString('en-NZ')} steps`, day.water !== null && `${day.water} L water`, day.sleep !== null && `${day.sleep} hr sleep`].filter(Boolean);
-    if (day.nutrition.trim()) entries.push(`Nutrition: ${day.nutrition.trim()}`);
-    if (day.recovery.trim()) entries.push(`Recovery: ${day.recovery.trim()}`);
-    if (day.sleepQuality) entries.push(`Sleep quality: ${day.sleepQuality}`);
-    if (day.fuelling?.length) entries.push(`Fuelling: ${day.fuelling.join(', ')}`);
-    if (entries.length) lines.push(`${displayDate(key)} · Daily habits\n${entries.join('\n')}`);
-  }
   return { title, text: lines.join('\n\n') };
 }

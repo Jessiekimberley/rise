@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server';
 import { z } from 'zod';
-import { hasAccess, isSameOrigin, ownerId } from '@/lib/access';
+import { isSameOrigin, ownerId } from '@/lib/access';
 import { docTarget } from '@/lib/coach-doc';
 import { docsConfiguration, refreshProgramme, verifyCheckInTarget } from '@/lib/google';
 import { todayKey, weekStart } from '@/lib/insights';
@@ -8,7 +8,7 @@ import { productionStore } from '@/lib/neon';
 import { programmeWeek } from '@/lib/weeks';
 
 export async function POST(request: Request) {
-  if (!isSameOrigin(request) || !await hasAccess()) return NextResponse.json({ error: 'Open your private Rise link again.' }, { status: 403 });
+  if (!isSameOrigin(request)) return NextResponse.json({ error: 'Open Rise Training to save this Doc.' }, { status: 403 });
   const input = z.object({ mode: z.enum(['programme', 'checkIns']), url: z.url().max(500) }).safeParse(await request.json().catch(() => null));
   if (!input.success) return NextResponse.json({ error: 'Enter a Google Docs link.' }, { status: 400 });
   try {

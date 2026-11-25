@@ -1,15 +1,12 @@
 'use client';
 
-import { ArrowLeftRight, ChartNoAxesCombined, Check, ChevronLeft, Play, Timer } from 'lucide-react';
+import { ChartNoAxesCombined, Check, ChevronLeft, Play, Timer } from 'lucide-react';
 import { useState, type FormEvent } from 'react';
 import { compactSet, displayDate, matchingSets, pastSessions, restDisplay } from '@/lib/insights';
 import type { SetLog, TrainingData } from '@/lib/model';
 import { canonicalVariant, exerciseOptions, prescribedReps, type Exercise } from '@/lib/programme';
-import { ChipGroup, PrimaryButton, RoundButton } from './ui';
+import { PrimaryButton, RoundButton } from './ui';
 
-const rirOptions = [
-  { value: '0', label: '0' }, { value: '1', label: '1' }, { value: '2', label: '2' }, { value: '3', label: '3+' },
-];
 const plateSizes = [25, 20, 15, 10, 5, 2.5, 1.25];
 const barKg = 20;
 export const warmupIndex = -1;
@@ -76,15 +73,14 @@ function PlateCalculator({ name, weight }: { name: string; weight: number | null
   </section>;
 }
 
-export function LogSet({ rows, active, exerciseNumber, exerciseCount, workSetCount, date, data, close, choose, swap, cues,
-  rest, nextExercise, finishing, savedRir, review, complete, save, remove }: {
+export function LogSet({ rows, active, exerciseNumber, exerciseCount, workSetCount, date, data, close, choose, cues, rest,
+  nextExercise, finishing, review, complete, save, remove }: {
   rows: LogSetRow[]; active: LogSetRow; exerciseNumber: number; exerciseCount: number; workSetCount: number; date: string; data: TrainingData;
-  close: () => void; choose: (index: number) => void; swap?: () => void; cues: () => void; rest: () => void;
-  nextExercise?: string; finishing: boolean; savedRir?: number | null; review?: () => void;
-  complete: (rir: number | null) => Promise<void>; save: (set: SetLog) => Promise<void>; remove: () => Promise<void>;
+  close: () => void; choose: (index: number) => void; cues: () => void; rest?: () => void;
+  nextExercise?: string; finishing: boolean; review?: () => void;
+  complete: () => Promise<void>; save: (set: SetLog) => Promise<void>; remove: () => Promise<void>;
 }) {
   const [drafts, setDrafts] = useState<Record<string, Draft>>({});
-  const [rirDraft, setRirDraft] = useState<string>();
   const [panel, setPanel] = useState<Panel>();
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
@@ -94,7 +90,6 @@ export function LogSet({ rows, active, exerciseNumber, exerciseCount, workSetCou
   const draft = draftFor(active);
   const warmup = index === warmupIndex;
   const timed = exercise.metric === 'seconds';
-  const rir = rirDraft ?? asText(savedRir);
   const weighted = isWeighted(exercise);
   const countLabel = timed ? 'Seconds' : exercise.perSide ? `Reps per ${exercise.perSide}` : 'Reps';
   const name = warmup ? 'Warm-up' : `Set ${index + 1}`;
@@ -140,7 +135,7 @@ export function LogSet({ rows, active, exerciseNumber, exerciseCount, workSetCou
   function submit(event: FormEvent) {
     event.preventDefault();
     if (finishing) {
-      void perform(() => complete(timed || !rir ? null : Number(rir)));
+      void perform(() => complete());
       return;
     }
     if (weighted && weightText && kg == null) {
@@ -162,14 +157,11 @@ export function LogSet({ rows, active, exerciseNumber, exerciseCount, workSetCou
     </div>
     <div className="logger-heading">
       <h1 id="log-heading">{exercise.name}</h1>
-      {swap && <button type="button" className="logger-pill logger-equipment" onClick={swap} disabled={busy}
-        aria-label={`Swap equipment, current: ${equipmentLabel(exercise, variant)}`}>
-        <ArrowLeftRight size={14} aria-hidden="true" />{equipmentLabel(exercise, variant)}
-      </button>}
+      {equipmentLabel(exercise, variant) && <span className="logger-pill logger-equipment">{equipmentLabel(exercise, variant)}</span>}
     </div>
     <div className="logger-content">
       <div className="logger-tools" aria-label="Exercise tools">
-        {exercise.rest > 0 && <button type="button" className="logger-pill" onClick={rest} disabled={busy}>
+        {exercise.rest > 0 && rest && <button type="button" className="logger-pill" onClick={rest} disabled={busy}>
           <Timer size={16} strokeWidth={1.8} aria-hidden="true" />{restDisplay(exercise.rest)} rest
         </button>}
         <button type="button" className="logger-pill" aria-pressed={history} onClick={() => setPanel(history ? undefined : 'history')} disabled={busy}>
@@ -234,13 +226,8 @@ export function LogSet({ rows, active, exerciseNumber, exerciseCount, workSetCou
       {error && <p className="notice" role="alert">{error}</p>}
       <div className="logger-status">
         <strong role="status">{finishing ? 'All working sets logged' : warmup ? 'Warm-up' : `${name} of ${workSetCount}`}</strong>
-        <span>Up next · {nextExercise ?? 'Finish workout'}</span>
+        <span>Up next · {nextExercise ?? 'Submit record'}</span>
       </div>
-      {finishing && !timed && <div className="logger-effort">
-        <span>Reps left on your last set <small>RIR · optional</small></span>
-        {rir && <button type="button" className="logger-remove" onClick={() => setRirDraft('')} disabled={busy}>Clear</button>}
-        <ChipGroup className="chips-four" label="Reps in reserve" value={rir} options={rirOptions} disabled={busy} onChange={setRirDraft} />
-      </div>}
       <PrimaryButton type="submit" disabled={busy}>
         {busy ? 'Saving…' : finishing ? 'Done' : logged ? `Update ${name.toLowerCase()}` : `Log ${name.toLowerCase()}`}
       </PrimaryButton>

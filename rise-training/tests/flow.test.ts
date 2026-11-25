@@ -55,6 +55,25 @@ test('an optional warm-up stays separate from work sets and strength history', (
   assert.deepEqual(progressPoints(data, 'squat', '', 'weight'), [{ date, value: 42.5 }]);
 });
 
+test('an unfinished workout can be discarded, and a submitted one cannot', () => {
+  const data = createData();
+  const date = '2026-11-18';
+  const now = `${date}T01:00:00Z`;
+  const session = { date, planId: 'lower-1' };
+  const key = sessionKey(date, session.planId);
+  applyCommand(data, commandSchema.parse({ type: 'start', ...session }), now);
+  assert.equal(data.sessions[key].startedAt, now);
+  applyCommand(data, { type: 'discard', ...session }, now);
+  assert.equal(key in data.sessions, false);
+  applyCommand(data, { type: 'discard', date: '2026-11-19', planId: 'upper-1' }, now);
+
+  const set: SetLog = { exerciseId: 'leg-press', variant: '', weight: 40, reps: 8, seconds: null, effort: null };
+  applyCommand(data, { type: 'putSet', ...session, slotId: 'leg-press', index: 0, set }, now);
+  applyCommand(data, { type: 'finish', ...session }, now);
+  assert.throws(() => applyCommand(data, { type: 'discard', ...session }, now), /already submitted/);
+  assert.equal(data.sessions[key].finishedAt, now);
+});
+
 test('workout, concurrent set saves, habits and coach report survive a database restart', async () => {
   const directory = await mkdtemp(join(tmpdir(), 'rise-flow-'));
   let database = new PGlite(directory);
@@ -106,8 +125,9 @@ test('workout, concurrent set saves, habits and coach report survive a database 
     assert.match(report.text, /Leg Press, set 2: 47.5 kg · 8 reps · RIR 2/);
     assert.match(report.text, /Back squat \(Barbell\), set 3/);
     assert.match(report.text, /Leg Press · final set RIR 3\+/);
-    assert.match(report.text, /9,100 steps\n3 L water\n7.5 hr sleep/);
-    assert.match(report.text, /Recovery: Good energy/);
+    assert.equal(snapshot.data.habits[date].steps, 9100);
+    assert.doesNotMatch(report.text, /steps/);
+    assert.doesNotMatch(report.text, /Daily habits/);
     const csv = workoutCsv(snapshot.data);
     assert.match(csv, /^\uFEFF"Workout date","Workout","Programme day","Status"/);
     assert.match(csv, /"2026-11-23",[^\r\n]+"Finished",[^\r\n]+"Back squat","Barbell","Warm-up",,20,8/);
@@ -126,6 +146,14 @@ test('workout, concurrent set saves, habits and coach report survive a database 
     await assert.rejects(() => store.mutate(owner, { type: 'checkIn', data: { ...checkIn, text: 'Changed' } }), /locked/);
     await store.mutate(owner, { type: 'markPublished', id, text: report.text });
     assert.ok((await store.load(owner)).data.checkIns[id].publishedAt);
+    const edited = await store.mutate(owner, commandSchema.parse({ type: 'checkIn', data: { ...checkIn, text: 'Updated log' } }));
+    assert.equal(edited.data.checkIns[id].text, 'Updated log');
+    assert.ok(edited.data.checkIns[id].publishedAt);
+    const deleted = await store.mutate(owner, commandSchema.parse({ type: 'deleteCheckIn', id: midweekId }));
+    assert.equal(deleted.data.checkIns[midweekId], undefined);
+    assert.equal(deleted.data.checkIns[id].text, 'Updated log');
+    const deletedSent = await store.mutate(owner, commandSchema.parse({ type: 'deleteCheckIn', id }));
+    assert.equal(deletedSent.data.checkIns[id], undefined);
     assert.deepEqual((await store.load('other')).data.sessions, {});
     const removed = await store.mutate(owner, { type: 'removeSet', ...slot, index: 1 });
     assert.equal(removed.data.sessions[sessionKey(date, slot.planId)].slots[slot.slotId].completion, undefined);

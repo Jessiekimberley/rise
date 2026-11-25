@@ -43,6 +43,7 @@ const slot = { ...session, slotId: key };
 export const commandSchema = z.discriminatedUnion('type', [
   z.object({ type: z.literal('start'), ...session }),
   z.object({ type: z.literal('finish'), ...session }),
+  z.object({ type: z.literal('discard'), ...session }),
   z.object({ type: z.literal('putSet'), ...slot, index: z.number().int().min(0).max(19), set: setSchema }),
   z.object({ type: z.literal('removeSet'), ...slot, index: z.number().int().min(0).max(19) }),
   z.object({ type: z.literal('completeExercise'), ...slot, rir: blankableNumber(3, true) }),
@@ -54,6 +55,7 @@ export const commandSchema = z.discriminatedUnion('type', [
   z.object({ type: z.literal('bottleSize'), litres: z.number().finite().min(0.05).max(5) }),
   z.object({ type: z.literal('programmeStart'), date }),
   z.object({ type: z.literal('checkIn'), data: checkInSchema }),
+  z.object({ type: z.literal('deleteCheckIn'), id: z.uuid() }),
   z.object({ type: z.literal('preparePublish'), id: z.uuid(), target: z.object({ documentId: z.string(), tabId: z.string() }) }),
   z.object({ type: z.literal('markPublished'), id: z.uuid(), text: z.string().trim().min(1).max(24_000) }),
 ]);
@@ -160,10 +162,15 @@ export function applyCommand(data: TrainingData, command: Command, now: string) 
       return;
     case 'checkIn': {
       const existing = data.checkIns[command.data.id];
-      if (existing?.publishedAt || existing?.publishingAt) throw new TrainingValidationError('This check-in is locked for Google Docs.');
-      data.checkIns[command.data.id] = command.data;
+      if (existing?.publishingAt && !existing.publishedAt) throw new TrainingValidationError('This check-in is locked for Google Docs.');
+      data.checkIns[command.data.id] = existing?.publishedAt
+        ? { ...command.data, publishedAt: existing.publishedAt, publishTarget: existing.publishTarget }
+        : command.data;
       return;
     }
+    case 'deleteCheckIn':
+      delete data.checkIns[command.id];
+      return;
     case 'preparePublish': {
       const previous = data.checkIns[command.id];
       if (!previous) throw new TrainingValidationError('Save your check-in before sending it to the Doc.');
@@ -183,6 +190,11 @@ export function applyCommand(data: TrainingData, command: Command, now: string) 
   const plan = workoutPlan(data, command.date, command.planId);
   if (!plan) throw new TrainingValidationError('This workout is not in the programme.');
   const sessionId = sessionKey(command.date, plan.id);
+  if (command.type === 'discard') {
+    if (data.sessions[sessionId]?.finishedAt) throw new TrainingValidationError('This workout is already submitted.');
+    delete data.sessions[sessionId];
+    return;
+  }
   const active = data.sessions[sessionId] ??= { date: command.date, planId: plan.id, plan, startedAt: now, slots: {} };
   if (command.type === 'finish') {
     if (!Object.values(active.slots).some((item) => Object.keys(item.sets).length)) {

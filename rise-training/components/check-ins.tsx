@@ -1,35 +1,16 @@
 'use client';
 
-import { Check, ChevronRight } from 'lucide-react';
-import { useState } from 'react';
-import { addDays, buildReport, displayDate, reportStats, sleepDuration, trainingWeekStart } from '@/lib/insights';
+import { Check, ChevronLeft, ChevronRight } from 'lucide-react';
+import { useEffect, useState } from 'react';
+import { addDays, buildReport, displayDate, trainingWeekStart } from '@/lib/insights';
 import type { CheckIn, TrainingData, TrainingSnapshot } from '@/lib/model';
 import { docUrl, type DocTarget } from '@/lib/coach-doc';
-import { programmeDays } from '@/lib/programme';
-import { ChipGroup, HeadingSentence, Pill, PrimaryButton, Row, RowStack } from './ui';
+import { WeeklyCheckInLink } from './weekly-check-in';
+import { HeadingSentence, Pill, PrimaryButton, RoundButton, Row, RowStack } from './ui';
 import type { Mutate } from './training-app';
 
 const dateWords = { weekday: 'long', day: 'numeric', month: 'long' } as const;
-const kinds = [{ value: 'midweek', label: 'Midweek' }, { value: 'weekly', label: 'Weekly' }] as const;
-const prompts = [
-  { label: 'Wins', placeholder: 'What went well this week?' },
-  { label: 'What’s been hard', placeholder: 'Training, food, sleep, motivation' },
-  { label: 'Questions for Brenna', placeholder: 'Anything you want feedback on' },
-];
-const emptyAnswers = ['', '', ''];
-const number = new Intl.NumberFormat('en-NZ', { maximumFractionDigits: 1 });
-const noLogs = 'No training or habits logged for these dates.';
-
-function summaryValues(data: TrainingData, start: string, end: string, days: number) {
-  const summary = reportStats(data, start, end);
-  const expected = programmeDays.slice(0, days).filter((day) => day.type === 'strength').length;
-  return [
-    { label: 'Strength sessions', value: `${summary.sessions} of ${expected}` },
-    { label: 'Avg steps', value: summary.steps == null ? '—' : String(Math.round(summary.steps).toLocaleString('en-NZ')) },
-    { label: 'Avg water', value: summary.water == null ? '—' : `${number.format(summary.water)} L` },
-    { label: 'Avg sleep', value: summary.sleep == null ? '—' : sleepDuration(summary.sleep) },
-  ];
-}
+const errorMessage = (reason: unknown) => reason instanceof Error ? reason.message : 'Could not update the log. Try again.';
 
 function sentEntries(data: TrainingData) {
   return Object.values(data.checkIns).filter((entry) => entry.publishedAt)
@@ -47,134 +28,183 @@ function CheckInSent({ entry, data, done, open }: { entry: CheckIn; data: Traini
       <Pill className="pill-new">New</Pill>
       <h2>{title}</h2>
       <p>{entry.text}</p>
-      <span className="fine">Preview of the text added to the doc</span>
     </section>
     {previous.length ? <section aria-label="Earlier check-ins">
-      <RowStack>{previous.map((item) => <Row key={item.id} label={displayDate(item.end)} value={item.kind === 'weekly' ? 'Weekly check-in' : 'Midweek check-in'}
+      <RowStack>{previous.map((item) => <Row key={item.id} label={displayDate(item.end)} value={item.kind === 'weekly' ? 'Weekly log' : 'Midweek log'}
         onClick={() => open(item)} end={<ChevronRight size={18} />} />)}</RowStack>
-    </section> : <p className="fine">No earlier check-ins yet.</p>}
-    <div className="screen-actions"><PrimaryButton onClick={done}>Done</PrimaryButton></div>
+    </section> : <p className="fine">No earlier logs yet.</p>}
+    <div className="screen-actions">
+      <PrimaryButton onClick={done}>Done</PrimaryButton>
+      <PrimaryButton className="button-quiet" onClick={() => open(entry)}>Edit this log</PrimaryButton>
+    </div>
   </section>;
 }
 
-export function CheckIns({ date, data, mutate, publish, destination, canManageDocs, docsReady, setFocused, done }: {
-  date: string; data: TrainingData; mutate: Mutate; publish: (id: string) => Promise<TrainingSnapshot>;
-  destination?: DocTarget; canManageDocs: boolean; docsReady: boolean; setFocused: (focused: boolean) => void; done: () => void;
+function LogEditor({ entry, data, onBack, onDone, mutate }: {
+  entry: CheckIn; data: TrainingData; onBack: () => void; onDone: () => void; mutate: Mutate;
 }) {
-  const [id, setId] = useState<string>();
-  const [kind, setKind] = useState<CheckIn['kind']>('weekly');
-  const [answers, setAnswers] = useState(emptyAnswers);
-  const [draftText, setDraftText] = useState<string>();
-  const [receipt, setReceipt] = useState<CheckIn>();
-  const [busy, setBusy] = useState<'save' | 'send'>();
+  const [text, setText] = useState(entry.text);
+  const [confirming, setConfirming] = useState(false);
+  const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
-  const [status, setStatus] = useState('');
-  const [retrySending, setRetrySending] = useState(false);
-  const selected = id ? data.checkIns[id] : undefined;
-  const start = selected?.start ?? trainingWeekStart(date, data.startedOn);
-  const days = kind === 'midweek' ? 3 : 7;
-  const intendedEnd = addDays(start, days - 1);
-  const end = selected?.end ?? (date < intendedEnd ? date : intendedEnd);
-  const covered = Math.min(days, 1 + Math.round((Date.parse(end) - Date.parse(start)) / 86_400_000));
-  const stats = summaryValues(data, start, end, days);
-  const report = buildReport(data, kind, start, end);
-  const canPublish = docsReady && !!(selected?.publishTarget ?? destination);
-  const locked = !!selected?.publishingAt || retrySending;
-  const body = draftText ?? [
-    `From your logs · ${displayDate(start)}–${displayDate(end)}\n${stats.map(({ label, value }) => `${label}: ${value}`).join('\n')}`,
-    ...prompts.flatMap(({ label }, index) => answers[index].trim() ? [`${label}\n${answers[index].trim()}`] : []),
-    report.text || noLogs,
-  ].join('\n\n');
-  const checkInHistory = Object.values(data.checkIns).sort((a, b) => b.end.localeCompare(a.end));
+  const title = buildReport(data, entry.kind, entry.start, entry.end).title;
+  const trimmed = text.trim();
+  const unchanged = trimmed === entry.text;
+  const locked = Boolean(entry.publishingAt && !entry.publishedAt);
+
+  async function save() {
+    if (busy || locked || !trimmed || unchanged) return;
+    setBusy(true);
+    setError('');
+    try {
+      await mutate({ type: 'checkIn', data: { id: entry.id, kind: entry.kind, start: entry.start, end: entry.end, text: trimmed } });
+      onDone();
+    } catch (reason) {
+      setError(errorMessage(reason));
+      setBusy(false);
+    }
+  }
+
+  async function remove() {
+    if (busy) return;
+    setBusy(true);
+    setError('');
+    try {
+      await mutate({ type: 'deleteCheckIn', id: entry.id });
+      onDone();
+    } catch (reason) {
+      setError(errorMessage(reason));
+      setBusy(false);
+    }
+  }
+
+  return <section className="screen screen-check-in log-editor">
+    <div className="screen-toolbar">
+      <RoundButton aria-label="Back to check-in" onClick={onBack} disabled={busy}><ChevronLeft size={20} /></RoundButton>
+      <span className="fine">{entry.publishedAt ? 'Sent' : 'Saved'}</span>
+    </div>
+    <header className="check-in-heading">
+      <p className="fine">{displayDate(entry.end, dateWords)}</p>
+      <HeadingSentence className="heading-32" lead="Training log." follow="Change the text or delete it." />
+    </header>
+    <section className="doc-preview">
+      <h2 id="saved-log-title">{title}</h2>
+      <textarea value={text} maxLength={24_000} aria-labelledby="saved-log-title" disabled={busy || locked} onChange={(event) => { setText(event.target.value); setConfirming(false); }} />
+    </section>
+    {locked && <p className="fine">This log is still sending to the coaching Doc. You can delete it.</p>}
+    {entry.publishedAt && <p className="fine">Saving updates this log in the app. The coaching Doc keeps the version already sent.</p>}
+    {error && <p className="notice" role="alert">{error}</p>}
+    <div className="screen-actions">
+      {confirming ? <>
+        <p className="fine">{entry.publishedAt ? 'This removes the log from the app. The coaching Doc keeps the copy already sent.' : 'This removes the log from the app.'}</p>
+        <PrimaryButton onClick={() => void remove()} disabled={busy}>{busy ? 'Deleting…' : 'Delete this log'}</PrimaryButton>
+        <PrimaryButton className="button-quiet" onClick={() => setConfirming(false)} disabled={busy}>Keep log</PrimaryButton>
+      </> : <>
+        <PrimaryButton onClick={() => void save()} disabled={busy || locked || !trimmed || unchanged}>{busy ? 'Saving…' : 'Save changes'}</PrimaryButton>
+        <PrimaryButton className="danger-quiet" onClick={() => setConfirming(true)} disabled={busy}>Delete log</PrimaryButton>
+      </>}
+    </div>
+  </section>;
+}
+
+export function CheckIns({ date, data, mutate, publish, destination, docsReady, setFocused, done }: {
+  date: string; data: TrainingData; mutate: Mutate; publish: (id: string) => Promise<TrainingSnapshot>;
+  destination?: DocTarget; docsReady: boolean; setFocused: (focused: boolean) => void; done: () => void;
+}) {
+  const [receipt, setReceipt] = useState<CheckIn>();
+  const [editingId, setEditingId] = useState<string>();
+  const [draft, setDraft] = useState<string | null>(null);
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState('');
+  const start = trainingWeekStart(date, data.startedOn);
+  const weekEnd = addDays(start, 6);
+  const end = date < weekEnd ? date : weekEnd;
+  const report = buildReport(data, 'weekly', start, end);
+  const text = draft ?? report.text;
+  const canSend = docsReady && !!destination && !!text.trim();
+  const history = Object.values(data.checkIns).sort((a, b) => b.end.localeCompare(a.end) || (b.publishedAt ?? '').localeCompare(a.publishedAt ?? ''));
+  const editing = editingId ? data.checkIns[editingId] : undefined;
+
+  useEffect(() => {
+    if (!editingId || data.checkIns[editingId]) return;
+    setEditingId(undefined);
+    setReceipt((current) => current?.id === editingId ? undefined : current);
+    setFocused(false);
+  }, [editingId, data.checkIns, setFocused]);
 
   function viewReceipt(entry: CheckIn) {
     setReceipt(entry);
+    setEditingId(undefined);
     setFocused(true);
     window.scrollTo(0, 0);
   }
 
-  function open(entry?: CheckIn) {
-    if (entry?.publishedAt) { viewReceipt(entry); return; }
-    setId(entry?.id);
-    setKind(entry?.kind ?? 'weekly');
-    setAnswers(emptyAnswers);
-    setDraftText(entry?.text);
-    setRetrySending(false);
-    setStatus('');
-    setError('');
+  function openLog(entry: CheckIn) {
+    setEditingId(entry.id);
+    setFocused(true);
+    window.scrollTo(0, 0);
   }
 
-  async function save(send: boolean) {
-    if (busy || !body.trim()) return;
-    setBusy(send ? 'send' : 'save');
-    setStatus('');
+  function closeLog() {
+    setEditingId(undefined);
+    if (!receipt) setFocused(false);
+    window.scrollTo(0, 0);
+  }
+
+  function leaveEditor() {
+    setEditingId(undefined);
+    setReceipt(undefined);
+    setFocused(false);
+    window.scrollTo(0, 0);
+  }
+
+  async function send() {
+    if (busy || !canSend) return;
+    setBusy(true);
     setError('');
-    let startedSend = false;
+    const id = crypto.randomUUID();
     try {
-      const idToSave = id ?? crypto.randomUUID();
-      if (!locked && selected?.text !== body) {
-        await mutate({ type: 'checkIn', data: { id: idToSave, kind, start, end, text: body } });
-        setId(idToSave);
-        setDraftText(body);
-      }
-      if (send) {
-        startedSend = true;
-        const result = await publish(idToSave);
-        const published = result.data.checkIns[idToSave];
-        if (!published?.publishedAt) throw new Error('Google Docs has yet to confirm the append. Try again.');
-        setRetrySending(false);
-        viewReceipt(published);
-      } else setStatus('Draft saved.');
+      await mutate({ type: 'checkIn', data: { id, kind: 'weekly', start, end, text: text.trim() } });
+      const result = await publish(id);
+      const published = result.data.checkIns[id];
+      if (!published?.publishedAt) throw new Error('Google Docs has yet to confirm the append. Try again.');
+      setDraft(null);
+      viewReceipt(published);
     } catch (reason) {
-      if (startedSend) setRetrySending(true);
-      setError(reason instanceof Error ? reason.message : 'Could not save the check-in. Try again.');
-    } finally { setBusy(undefined); }
+      setError(reason instanceof Error ? reason.message : 'Could not send the log. Try again.');
+    } finally { setBusy(false); }
   }
 
-  if (receipt) return <CheckInSent entry={receipt} data={data} done={done} open={viewReceipt} />;
+  if (editing) return <LogEditor key={editing.id} entry={editing} data={data} mutate={mutate} onBack={closeLog} onDone={leaveEditor} />;
+  if (receipt) return <CheckInSent entry={receipt} data={data} done={done} open={openLog} />;
 
   return <section className="screen screen-nav screen-check-in">
     <header className="check-in-heading">
       <p className="fine">{displayDate(date, dateWords)}</p>
-      <HeadingSentence className="heading-32" lead="Check-in." follow="For Brenna." />
+      <HeadingSentence className="heading-32" lead="Check-in." follow="Sets and reps for Brenna." />
     </header>
-    <ChipGroup className="check-in-kinds" label="Check-in period" value={kind} disabled={!!id || !!busy}
-      options={[...kinds]} onChange={(value) => setKind(value === 'midweek' ? 'midweek' : 'weekly')} />
-    <section className="check-in-summary" aria-label="Check-in summary">
-      <h2 className="fine">From your logs · {covered === 1 ? 'Day 1' : `Days 1–${covered}`}</h2>
-      <dl>{stats.map(({ label, value }) => <div key={label}><dt>{label}</dt><dd>{value}</dd></div>)}</dl>
+    <section className="doc-preview" aria-label="Training log">
+      <h2>{report.title}</h2>
+      <span className="fine">Change the text before you send it.</span>
+      <textarea value={text} maxLength={24_000} placeholder="No sets logged for this week yet." aria-label="This week's log" disabled={busy}
+        onChange={(event) => setDraft(event.target.value)} />
+      {draft !== null && draft !== report.text && <Pill onClick={() => setDraft(null)}>Use latest sets</Pill>}
     </section>
-    {draftText === undefined ? <RowStack>
-      {prompts.map(({ label, placeholder }, index) => <label className="check-in-answer" key={label}><span>{label}</span>
-        <textarea rows={2} maxLength={2_000} placeholder={placeholder} value={answers[index]} disabled={!!busy}
-          onChange={(event) => setAnswers((previous) => previous.map((answer, i) => i === index ? event.target.value : answer))} />
-      </label>)}
-    </RowStack> : <label className="check-in-answer saved-check-in">
-      <span>{locked ? 'Saved check-in' : 'Edit saved draft'}</span>
-      <textarea rows={7} maxLength={24_000} value={draftText} readOnly={locked} disabled={!!busy}
-        onChange={(event) => setDraftText(event.target.value)} />
-    </label>}
     {error && <p className="notice" role="alert">{error}</p>}
-    {status && <p className="fine" role="status">{status}</p>}
-    {canManageDocs && !canPublish && <p className="fine">Connect a check-in Doc in Programme settings to send.</p>}
-    {canManageDocs ? <div className="screen-actions">
-      <PrimaryButton onClick={() => void save(true)} disabled={!!busy || !canPublish || !body.trim()}>
-        {busy === 'send' ? 'Sending…' : locked ? 'Retry sending to the coaching doc' : 'Send to coaching doc'}
+    {!docsReady && <p className="fine">Google Docs isn’t connected yet. Your sets stay saved in the app.</p>}
+    {docsReady && !destination && <p className="fine">The coaching Doc isn’t connected yet. Your sets stay saved in the app.</p>}
+    <div className="screen-actions">
+      <PrimaryButton onClick={() => void send()} disabled={busy || !canSend}>
+        {busy ? 'Sending…' : 'Send to coaching doc'}
       </PrimaryButton>
-    </div> : !locked && <div className="screen-actions">
-      <PrimaryButton onClick={() => void save(false)} disabled={!!busy || !body.trim()}>{busy === 'save' ? 'Saving…' : 'Save draft'}</PrimaryButton>
-    </div>}
+      <WeeklyCheckInLink />
+    </div>
     <details className="disclosure supplementary">
-      <summary>Drafts and previous check-ins</summary>
-      <div className="check-in-extras">
-        {canManageDocs && !locked && <Pill onClick={() => void save(false)} disabled={!!busy || !body.trim()}>{busy === 'save' ? 'Saving…' : 'Save draft'}</Pill>}
-        {id && <Pill onClick={() => open()} disabled={!!busy}>Start a new check-in</Pill>}
-        {destination && <Pill href={docUrl(destination)}>Open coaching Doc</Pill>}
-      </div>
-      {checkInHistory.length ? <RowStack>{checkInHistory.map((entry) => <Row key={entry.id} label={`${displayDate(entry.end)} · ${entry.publishedAt ? 'Sent' : entry.publishingAt ? 'Ready to retry' : 'Draft'}`}
-        value={entry.kind === 'weekly' ? 'Weekly check-in' : 'Midweek check-in'} onClick={() => { if (!busy) open(entry); }} end={<ChevronRight size={18} />} />)}</RowStack>
-        : <p className="fine">No previous check-ins yet.</p>}
+      <summary>Previous logs</summary>
+      {destination && <div className="check-in-extras"><Pill href={docUrl(destination)}>Open coaching Doc</Pill></div>}
+      {history.length ? <RowStack>{history.map((entry) => <Row key={entry.id} label={`${displayDate(entry.end)} · ${entry.publishedAt ? 'Sent' : 'Saved'}`}
+        value="Training log" onClick={() => { if (!busy) openLog(entry); }} end={<ChevronRight size={18} />} />)}</RowStack>
+        : <p className="fine">No previous logs yet.</p>}
     </details>
-    <Pill href="/api/training/export">Download workout history (CSV)</Pill>
   </section>;
 }

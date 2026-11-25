@@ -1,12 +1,12 @@
 import { NextResponse } from 'next/server';
 import { z } from 'zod';
-import { hasAccess, isSameOrigin, ownerId } from '@/lib/access';
+import { isSameOrigin, ownerId } from '@/lib/access';
 import { appendCheckIn, docsConfiguration } from '@/lib/google';
 import { buildReport } from '@/lib/insights';
 import { productionStore } from '@/lib/neon';
 
 export async function POST(request: Request) {
-  if (!isSameOrigin(request) || !await hasAccess()) return NextResponse.json({ error: 'Open your private Rise link again.' }, { status: 403 });
+  if (!isSameOrigin(request)) return NextResponse.json({ error: 'Open Rise Training to send this check-in.' }, { status: 403 });
   const input = z.object({ id: z.uuid() }).safeParse(await request.json().catch(() => null));
   if (!input.success) return NextResponse.json({ error: 'Choose a saved check-in.' }, { status: 400 });
   try {

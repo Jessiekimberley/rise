@@ -1,14 +1,14 @@
 'use client';
 
-import { Pause, Play, Timer, X } from 'lucide-react';
 import { useEffect, useRef, useState } from 'react';
 import { restDisplay } from '@/lib/insights';
 import { scheduleRestChime } from '@/lib/rest-audio';
-import { BottomSheet, RoundButton } from './ui';
 
 export type RestDetails = {
   seconds: number;
   startedAt: number;
+  upcoming?: string;
+  last?: string;
 };
 
 export function useRestAudio() {
@@ -36,17 +36,18 @@ export function useRestAudio() {
   return { prime, cancel, schedule };
 }
 
-const step = 10;
+const radius = 124;
+const circumference = 2 * Math.PI * radius;
+const step = 15;
 
 export function RestTimer({ details, audio, close }: { details: RestDetails; audio: ReturnType<typeof useRestAudio>; close: () => void }) {
+  const dialog = useRef<HTMLDialogElement>(null);
   const deadline = useRef(details.startedAt + details.seconds * 1_000);
-  const held = useRef<number | null>(null);
   const [seconds, setSeconds] = useState(details.seconds);
-  const [paused, setPaused] = useState(false);
+  const [total, setTotal] = useState(details.seconds);
   const notified = useRef(false);
 
   function update() {
-    if (held.current != null) return;
     const remaining = Math.max(0, Math.ceil((deadline.current - Date.now()) / 1_000));
     setSeconds(remaining);
     if (remaining === 0 && !notified.current) {
@@ -56,62 +57,62 @@ export function RestTimer({ details, audio, close }: { details: RestDetails; aud
   }
 
   useEffect(() => {
+    const element = dialog.current;
+    if (element && !element.open) element.showModal();
     const tick = window.setInterval(update, 180);
-    return () => window.clearInterval(tick);
+    return () => {
+      window.clearInterval(tick);
+      element?.close();
+    };
   }, []);
 
   function adjust(amount: number) {
     audio.prime();
-    if (held.current != null) {
-      held.current = Math.max(0, held.current + amount);
-      setSeconds(held.current);
-      return;
-    }
     const now = Date.now();
     deadline.current = Math.max(now, deadline.current) + amount * 1_000;
-    const remaining = Math.max(0, (deadline.current - now) / 1_000);
-    audio.schedule(remaining);
-    if (remaining > 0) notified.current = false;
-    update();
-  }
-
-  function togglePause() {
-    audio.prime();
-    if (held.current != null) {
-      const remaining = held.current;
-      held.current = null;
-      deadline.current = Date.now() + remaining * 1_000;
-      if (remaining > 0) {
-        notified.current = false;
-        audio.schedule(remaining);
-      }
-      setPaused(false);
-      update();
-      return;
-    }
-    const remaining = Math.max(0, Math.ceil((deadline.current - Date.now()) / 1_000));
-    held.current = remaining;
-    audio.cancel();
-    setPaused(true);
+    const remaining = Math.max(0, Math.ceil((deadline.current - now) / 1_000));
+    setTotal((current) => Math.max(current, remaining));
+    if (remaining > 0) {
+      notified.current = false;
+      audio.schedule(remaining);
+    } else audio.cancel();
     setSeconds(remaining);
   }
 
-  return <BottomSheet className="rest-sheet" labelId="rest-heading" onClose={close}>
-    <div className="rest-sheet-head">
-      <h2 id="rest-heading">Rest</h2>
-      <RoundButton aria-label="Close rest timer" onClick={close}><X size={18} /></RoundButton>
+  const fraction = total > 0 ? Math.min(1, seconds / total) : 0;
+
+  return <dialog ref={dialog} className="rest-screen" aria-labelledby="rest-heading"
+    onCancel={(event) => { event.preventDefault(); close(); }}
+    onClick={(event) => { if (event.target === event.currentTarget) close(); }}>
+    <img className="rest-photo" src="/images/days/night.webp" alt="" />
+    <span className="rest-scrim" aria-hidden="true" />
+    <div className="rest-body">
+      <div className="rest-toolbar">
+        <span>Rest {restDisplay(details.seconds)}</span>
+      </div>
+      <h2 id="rest-heading">Breathe. Rest.</h2>
+      <div className="rest-ring">
+        <svg aria-hidden="true" viewBox="0 0 272 272">
+          <circle cx="136" cy="136" r={radius} />
+          <circle cx="136" cy="136" r={radius} strokeDasharray={circumference} strokeDashoffset={circumference * (1 - fraction)} />
+        </svg>
+        <div className="rest-face">
+          <span role="timer" aria-live="off">{restDisplay(seconds)}</span>
+          <span>of {restDisplay(details.seconds)}</span>
+        </div>
+      </div>
+      <div className="rest-nudges">
+        <button type="button" onClick={() => adjust(-step)} disabled={seconds === 0}>−15 s</button>
+        <button type="button" onClick={() => adjust(step)}>+15 s</button>
+      </div>
+      <div className="rest-footer">
+        {details.upcoming && <div className="rest-next">
+          <span>Up next · {details.upcoming}</span>
+          {details.last && <strong>{details.last}</strong>}
+        </div>}
+        {seconds === 0 && <p className="rest-complete" role="status">Rest complete</p>}
+        <button type="button" className="rest-skip" onClick={close}>{seconds === 0 ? 'Continue' : 'Skip rest'}</button>
+      </div>
     </div>
-    <div className="rest-clock">
-      <button type="button" className="rest-nudge" aria-label="Subtract 10 seconds" onClick={() => adjust(-step)} disabled={seconds === 0}>
-        <Timer size={16} aria-hidden="true" /><span>−10</span>
-      </button>
-      <span role="timer" aria-live="off">{restDisplay(seconds)}</span>
-      <button type="button" className="rest-nudge" aria-label="Add 10 seconds" onClick={() => adjust(step)}>
-        <Timer size={16} aria-hidden="true" /><span>+10</span>
-      </button>
-    </div>
-    {seconds === 0 ? <p className="rest-done" role="status">Rest complete</p> : <button type="button" className="rest-pause" aria-label={paused ? 'Resume rest' : 'Pause rest'} aria-pressed={paused} onClick={togglePause}>
-      {paused ? <Play size={26} aria-hidden="true" /> : <Pause size={26} aria-hidden="true" />}
-    </button>}
-  </BottomSheet>;
+  </dialog>;
 }

@@ -1,28 +1,29 @@
 'use client';
 
-import { MessageSquare } from 'lucide-react';
+import { ChevronLeft, ChevronRight, MessageSquare } from 'lucide-react';
 import { useState } from 'react';
 import { addDays, displayDate, scheduledProgrammeDay, weekStart } from '@/lib/insights';
 import { sessionKey, type TrainingData } from '@/lib/model';
 import { dayTitle, programmeDays } from '@/lib/programme';
 import { availableWeek, weekPlans, workoutPlan } from '@/lib/weeks';
-import { dailyHabitGoals } from './habits';
+import { WeeklyCheckInLink } from './weekly-check-in';
 import { ChipGroup, HeadingSentence, PhotoHero, Pill, PrimaryButton, RoundButton } from './ui';
 
 const photos = ['glass', 'shoulder', 'swim', 'liquid', 'blur', 'thermal', 'night'];
 const compactName = (name: string) => /^[A-Z]{2,}$/.test(name)
   ? name : name.replace(/^Forearm /i, '').replace(/ (with dumbbells|on cable)$/i, '').toLowerCase();
 
-export function Today({ date, today, data, firstName, initials, openWorkout, openHabits, openCheckIn, openSettings, reviewLabel, openReview }: {
-  date: string; today: string; data: TrainingData; firstName: string; initials: string;
-  openWorkout: (id: string, date: string) => void; openHabits: () => void;
-  openCheckIn: () => void; openSettings: () => void; reviewLabel?: string; openReview: () => void;
+export function Today({ today, data, firstName, openWorkout, openCheckIn }: {
+  today: string; data: TrainingData; firstName: string;
+  openWorkout: (id: string, date: string) => void; openCheckIn: () => void;
 }) {
-  const [previewDate, setPreviewDate] = useState(date);
-  const start = weekStart(date);
-  const dates = programmeDays.map((_, index) => addDays(start, index));
+  const [previewDate, setPreviewDate] = useState(today);
+  const [weekOf, setWeekOf] = useState(() => weekStart(today));
+  const dates = programmeDays.map((_, index) => addDays(weekOf, index));
   const day = scheduledProgrammeDay(previewDate, data);
   const current = previewDate === today;
+  const future = previewDate > today;
+  const currentWeek = weekOf === weekStart(today);
   const weekday = displayDate(previewDate, { weekday: 'long' });
   const definition = programmeDays[day - 1];
   const programme = weekPlans(data, previewDate);
@@ -37,46 +38,56 @@ export function Today({ date, today, data, firstName, initials, openWorkout, ope
   const summary = activePlan
     ? `${activePlan.exercises.map((exercise) => compactName(exercise.name)).join(', ').replace(/^./, (letter) => letter.toUpperCase())}. ${activePlan.exercises.reduce((sum, item) => sum + item.sets, 0)} sets.`
     : definition.guidance?.[0] ?? definition.options?.join(' · ') ?? definition.note;
-  const completed = new Set(Object.values(data.sessions).filter((entry) => entry.finishedAt && entry.date >= start && entry.date <= addDays(start, 6)).map((entry) => entry.planId));
+  const completed = new Set(Object.values(data.sessions).filter((entry) => entry.finishedAt && entry.date >= weekOf && entry.date <= addDays(weekOf, 6)).map((entry) => entry.planId));
   function open() {
     if (plan) openWorkout(plan.id, previewDate);
-    else openHabits();
   }
+  function shiftWeek(days: number) {
+    const nextWeek = addDays(weekOf, days);
+    if (nextWeek > weekStart(today)) return;
+    setWeekOf(nextWeek);
+    setPreviewDate(addDays(previewDate, days));
+  }
+  const when = current ? 'Today' : currentWeek ? weekday : displayDate(previewDate, { weekday: 'short', day: 'numeric', month: 'short' });
+  const action = session?.finishedAt ? 'View session' : session ? 'Resume workout' : future ? 'Preview session' : current ? 'View workout' : 'Log this day';
+  const weekLabel = currentWeek
+    ? 'This week'
+    : `${displayDate(weekOf)} – ${displayDate(addDays(weekOf, 6))}`;
 
   return <section className="screen screen-nav screen-today">
     <div className="screen-toolbar">
-      <RoundButton aria-label="Programme settings and log date" onClick={openSettings}>{initials}</RoundButton>
-      <RoundButton aria-label="Start a check-in" onClick={openCheckIn}><MessageSquare size={20} /></RoundButton>
+      <span />
+      <RoundButton aria-label="Send this week's log" onClick={openCheckIn}><MessageSquare size={20} /></RoundButton>
     </div>
-    <HeadingSentence className="heading-small" lead={current ? `Hi, ${firstName}.` : `${weekday} preview.`} follow={summary} />
-    <PhotoHero src={`/images/days/${photos[day - 1]}.webp`} title={title} label={`${current ? 'Today' : weekday} · Day ${day}`} onClick={open} />
+    <HeadingSentence className="heading-small" lead={current ? `Hi, ${firstName}.` : future ? `${weekday} preview.` : `${weekday} ${displayDate(previewDate)}.`} follow={summary} />
+    <PhotoHero src={`/images/days/${photos[day - 1]}.webp`} title={title} label={`${when} · Day ${day}`} onClick={open} />
     {resume && resumePlan && <Pill className="pill-white" onClick={() => openWorkout(resume.planId, resume.date)}>
       Resume {dayTitle(resumePlan)} · {displayDate(resume.date)}
     </Pill>}
     <div className="row-stack">
       <section className="week-row" aria-label="Training week">
-        <div className="week-caption"><span>This week · tap a day to preview</span><strong>{completed.size} of {programme.length} strength</strong></div>
+        <div className="week-switch">
+          <RoundButton className="round-muted" aria-label="Previous week" onClick={() => shiftWeek(-7)}><ChevronLeft size={18} /></RoundButton>
+          <span>{weekLabel}</span>
+          <RoundButton className="round-muted" aria-label="Next week" onClick={() => shiftWeek(7)} disabled={currentWeek}><ChevronRight size={18} /></RoundButton>
+        </div>
+        <div className="week-caption"><span>Tap a day</span><strong>{completed.size} of {programme.length} strength</strong></div>
         <ChipGroup label="Day of the week" className="week-strip" value={previewDate} onChange={setPreviewDate}
           options={dates.map((dayDate) => {
             const item = programmeDays[scheduledProgrammeDay(dayDate, data) - 1];
             const name = displayDate(dayDate, { weekday: 'long' });
+            const logged = Object.values(data.sessions).some((entry) => entry.date === dayDate && entry.finishedAt);
             return {
-              value: dayDate, accessibleLabel: `${name}, Day ${item.day}, ${item.title}`,
-              label: <><strong data-strength={item.type === 'strength'}>{name[0]}</strong><small>{dayDate === today ? 'Today' : `D${item.day}`}</small></>,
+              value: dayDate, accessibleLabel: `${name} ${displayDate(dayDate)}, Day ${item.day}, ${item.title}${logged ? ', logged' : ''}`,
+              label: <><strong data-strength={item.type === 'strength'}>{name[0]}</strong><small>{dayDate === today ? 'Today' : logged ? 'Done' : `D${item.day}`}</small></>,
             };
           })} />
       </section>
-      <button type="button" className="today-habits" onClick={openHabits}>
-        <strong>Daily habits</strong>
-        <span className="today-habit-goals">
-          {dailyHabitGoals.map(({ label, value }) => <span key={label}>{value}</span>)}
-        </span>
-      </button>
     </div>
-    {reviewLabel && <Pill className="review-flag" onClick={openReview}>{reviewLabel}</Pill>}
     {!!coachWeek?.notes?.length && <details className="disclosure"><summary>Brenna’s notes · Week {coachWeek.number}</summary>{coachWeek.notes.map((note, index) => <p key={index}>{note}</p>)}</details>}
     <div className="screen-actions">
-      <PrimaryButton onClick={open}>{plan ? (session?.finishedAt ? 'View session' : session ? 'Resume workout' : current ? 'View workout' : 'Preview session') : 'Open daily habits'}</PrimaryButton>
+      {plan && <PrimaryButton onClick={open}>{action}</PrimaryButton>}
+      <WeeklyCheckInLink />
     </div>
   </section>;
 }
