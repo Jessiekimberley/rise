@@ -18,6 +18,5 @@ export default async function Home() {
     : undefined;
   return <TrainingApp initial={trainingLogView(snapshot, true)} today={today} configuredDoc={configuredDoc}
     docsReady={Boolean(process.env.GOOGLE_SERVICE_ACCOUNT_JSON)}
-    firstName={programme.client.name.split(' ')[0]}
-    coachText={`sms:${programme.coach.phone.replace(/\D/g, '')}`} />;
+    firstName={programme.client.name.split(' ')[0]} />;
 }

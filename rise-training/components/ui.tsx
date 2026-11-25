@@ -105,14 +105,16 @@ export function BottomSheet({ children, className = '', labelId, onClose }: Shee
 }
 
 export function PhotoHero({ src, position, label, title, onClick }: {
-  src: string; position?: string; label: string; title: string; onClick: () => void;
+  src: string; position?: string; label: string; title: string; onClick?: () => void;
 }) {
-  return <button type="button" className="photo-hero" onClick={onClick}>
+  const body = <>
     <Image key={src} src={src} alt="" fill sizes="(max-width: 520px) 100vw, 480px" loading="eager" style={{ objectPosition: position }} />
     <span className="photo-scrim" aria-hidden="true" />
     <span className="photo-copy"><span>{label}</span><strong>{title}</strong></span>
-    <span className="round-button photo-arrow" aria-hidden="true"><ArrowRight size={20} strokeWidth={1.8} /></span>
-  </button>;
+    {onClick && <span className="round-button photo-arrow" aria-hidden="true"><ArrowRight size={20} strokeWidth={1.8} /></span>}
+  </>;
+  if (!onClick) return <div className="photo-hero">{body}</div>;
+  return <button type="button" className="photo-hero" onClick={onClick}>{body}</button>;
 }
 
 export function NumberField({ label, value, onChange, decimal, disabled }: {

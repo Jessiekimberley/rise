@@ -4,7 +4,7 @@ import { ChevronLeft, ChevronRight, MessageSquare } from 'lucide-react';
 import { useState } from 'react';
 import { addDays, displayDate, scheduledProgrammeDay, weekStart } from '@/lib/insights';
 import { sessionKey, type TrainingData } from '@/lib/model';
-import { dayTitle, programmeDays } from '@/lib/programme';
+import { dayKind, dayTitle, programmeDays } from '@/lib/programme';
 import { availableWeek, weekPlans, workoutPlan } from '@/lib/weeks';
 import { WeeklyCheckInLink } from './weekly-check-in';
 import { ChipGroup, HeadingSentence, PhotoHero, Pill, PrimaryButton, RoundButton } from './ui';
@@ -43,9 +43,13 @@ export function Today({ today, data, firstName, openWorkout, openCheckIn }: {
   const day = scheduledProgrammeDay(previewDate, data);
   const current = previewDate === today;
   const future = previewDate > today;
-  const currentWeek = weekOf === weekStart(today);
+  const thisWeek = weekStart(today);
+  const nextWeek = addDays(thisWeek, 7);
+  const currentWeek = weekOf === thisWeek;
+  const viewingNext = weekOf === nextWeek;
   const weekday = displayDate(previewDate, { weekday: 'long' });
   const definition = programmeDays[day - 1];
+  const kind = dayKind(definition.type);
   const programme = weekPlans(data, previewDate);
   const plan = programme.find((item) => item.day === day);
   const session = plan && data.sessions[sessionKey(previewDate, plan.id)];
@@ -63,25 +67,25 @@ export function Today({ today, data, firstName, openWorkout, openCheckIn }: {
     if (plan) openWorkout(plan.id, previewDate);
   }
   function shiftWeek(days: number) {
-    const nextWeek = addDays(weekOf, days);
-    if (nextWeek > weekStart(today)) return;
-    setWeekOf(nextWeek);
+    const shifted = addDays(weekOf, days);
+    if (shifted > nextWeek) return;
+    setWeekOf(shifted);
     setPreviewDate(addDays(previewDate, days));
   }
   const when = current ? 'Today' : currentWeek ? weekday : displayDate(previewDate, { weekday: 'short', day: 'numeric', month: 'short' });
   const photo = mixPhotos(weekOf)[Math.max(0, dates.indexOf(previewDate))];
   const action = session?.finishedAt ? 'View session' : session ? 'Resume workout' : future ? 'Preview session' : current ? 'View workout' : 'Log this day';
-  const weekLabel = currentWeek
-    ? 'This week'
+  const weekLabel = currentWeek ? 'This week' : viewingNext ? 'Next week'
     : `${displayDate(weekOf)} – ${displayDate(addDays(weekOf, 6))}`;
+  const dayLabel = kind === 'cardio' ? 'Cardio' : kind === 'rest' ? 'Rest' : `Day ${day}`;
 
   return <section className="screen screen-nav screen-today">
     <div className="screen-toolbar">
       <span />
       <RoundButton aria-label="Send this week's log" onClick={openCheckIn}><MessageSquare size={20} /></RoundButton>
     </div>
-    <HeadingSentence className="heading-small" lead={current ? `Hi, ${firstName}.` : future ? `${weekday} preview.` : `${weekday} ${displayDate(previewDate)}.`} follow={summary} />
-    <PhotoHero src={`/images/days/${photo.src}`} position={photo.position} title={title} label={`${when} · Day ${day}`} onClick={open} />
+    <HeadingSentence className="heading-small" lead={current ? `Hi, ${firstName}.` : viewingNext ? `${weekday}, next week.` : future ? `${weekday} preview.` : `${weekday} ${displayDate(previewDate)}.`} follow={summary} />
+    <PhotoHero src={`/images/days/${photo.src}`} position={photo.position} title={title} label={`${when} · ${dayLabel}`} onClick={plan ? open : undefined} />
     {resume && resumePlan && <Pill className="pill-white" onClick={() => openWorkout(resume.planId, resume.date)}>
       Resume {dayTitle(resumePlan)} · {displayDate(resume.date)}
     </Pill>}
@@ -90,17 +94,20 @@ export function Today({ today, data, firstName, openWorkout, openCheckIn }: {
         <div className="week-switch">
           <RoundButton className="round-muted" aria-label="Previous week" onClick={() => shiftWeek(-7)}><ChevronLeft size={18} /></RoundButton>
           <span>{weekLabel}</span>
-          <RoundButton className="round-muted" aria-label="Next week" onClick={() => shiftWeek(7)} disabled={currentWeek}><ChevronRight size={18} /></RoundButton>
+          <RoundButton className="round-muted" aria-label="Next week" onClick={() => shiftWeek(7)} disabled={viewingNext}><ChevronRight size={18} /></RoundButton>
         </div>
         <div className="week-caption"><span>Tap a day</span><strong>{completed.size} of {programme.length} strength</strong></div>
         <ChipGroup label="Day of the week" className="week-strip" value={previewDate} onChange={setPreviewDate}
           options={dates.map((dayDate) => {
             const item = programmeDays[scheduledProgrammeDay(dayDate, data) - 1];
+            const itemKind = dayKind(item.type);
             const name = displayDate(dayDate, { weekday: 'long' });
             const logged = Object.values(data.sessions).some((entry) => entry.date === dayDate && entry.finishedAt);
+            const mark = itemKind === 'cardio' ? 'Cardio' : itemKind === 'rest' ? 'Rest' : dayDate === today ? 'Today' : logged ? 'Done' : `D${item.day}`;
+            const role = itemKind === 'cardio' ? 'cardio day' : itemKind === 'rest' ? 'rest day' : `Day ${item.day}, ${item.title}`;
             return {
-              value: dayDate, accessibleLabel: `${name} ${displayDate(dayDate)}, Day ${item.day}, ${item.title}${logged ? ', logged' : ''}`,
-              label: <><strong data-strength={item.type === 'strength'}>{name[0]}</strong><small>{dayDate === today ? 'Today' : logged ? 'Done' : `D${item.day}`}</small></>,
+              value: dayDate, accessibleLabel: `${name} ${displayDate(dayDate)}, ${role}${dayDate === today ? ', today' : ''}${logged ? ', logged' : ''}`,
+              label: <><strong data-kind={itemKind}>{name[0]}</strong><small>{mark}</small></>,
             };
           })} />
       </section>

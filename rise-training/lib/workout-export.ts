@@ -1,3 +1,4 @@
+import { displayDate, setWork, type ReportDay } from './insights';
 import type { SetLog, TrainingData } from './model';
 import { programmeExercises, workoutPlan } from './weeks';
 
@@ -40,6 +41,8 @@ export function workoutCsv(data: TrainingData) {
         ]);
       }
       if (slot.warmup) addSet(slot.warmup, 'Warm-up');
+      if (slot.upper) addSet(slot.upper, 'Upper');
+      if (slot.lower) addSet(slot.lower, 'Lower');
       for (const [index, set] of Object.entries(slot.sets)) addSet(set, 'Working set', Number(index) + 1);
       const slotDetails = [...workout, planned, exercise(slot.exerciseId)?.name ?? slot.exerciseId, slot.variant];
       if (slot.note) rows.push([...slotDetails, 'Note', null, null, null, null, null, null, slot.note]);
@@ -51,6 +54,25 @@ export function workoutCsv(data: TrainingData) {
     if (rows.length === firstRow) rows.push(workout);
   }
 
+  const csv = rows.map((row) => columns.map((_, index) => csvCell(row[index])).join(',')).join('\r\n');
+  return `\uFEFF${csv}\r\n`;
+}
+
+export function setsCsv(days: ReportDay[]) {
+  const columns = ['Day', 'Workout', 'Status', 'Exercise', 'Set', 'Weight (kg)', 'Reps', 'RIR', 'Notes'];
+  const rows: Cell[][] = [columns];
+  const ordered = [...days].sort((a, b) => a.date.localeCompare(b.date) || a.order - b.order);
+  for (const day of ordered) {
+    const label = `${day.weekday}, ${displayDate(day.date, { day: 'numeric', month: 'short', year: 'numeric' })}`;
+    const status = day.workout ? (day.inProgress ? 'In progress' : 'Finished') : '';
+    if (!day.sets.length && !day.lines.length) {
+      rows.push([label, '', '', '', '', '', '', '', 'No sets logged']);
+      continue;
+    }
+    for (const set of day.sets) rows.push([label, day.workout, status, set.exercise, set.set, set.weight, setWork(set), set.rir, '']);
+    for (const line of day.lines) rows.push([label, day.workout, status, '', '', '', '', '', line]);
+  }
+  if (rows.length === 1) rows.push(['No days selected']);
   const csv = rows.map((row) => columns.map((_, index) => csvCell(row[index])).join(',')).join('\r\n');
   return `\uFEFF${csv}\r\n`;
 }

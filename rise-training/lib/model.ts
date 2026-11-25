@@ -21,6 +21,9 @@ export const habitsSchema = z.object({
   recovery: text,
   sleepQuality: z.enum(['Deep', 'OK', 'Broken']).optional(),
   fuelling: z.array(z.string().min(1).max(100)).max(5).optional(),
+  waterHitTarget: z.boolean().nullable().optional(),
+  sleepNote: text.nullable().optional(),
+  fuellingNote: text.nullable().optional(),
 });
 
 export const stepSyncSchema = z.strictObject({ date, steps: stepCount });
@@ -44,10 +47,16 @@ export const commandSchema = z.discriminatedUnion('type', [
   z.object({ type: z.literal('start'), ...session }),
   z.object({ type: z.literal('finish'), ...session }),
   z.object({ type: z.literal('discard'), ...session }),
+  z.object({ type: z.literal('pauseClock'), ...session }),
+  z.object({ type: z.literal('resumeClock'), ...session }),
+  z.object({ type: z.literal('resetClock'), ...session }),
+  z.object({ type: z.literal('restart'), ...session }),
   z.object({ type: z.literal('putSet'), ...slot, index: z.number().int().min(0).max(19), set: setSchema }),
   z.object({ type: z.literal('removeSet'), ...slot, index: z.number().int().min(0).max(19) }),
+  z.object({ type: z.literal('addSet'), ...slot, kind: z.enum(['warmup', 'upper', 'lower']).optional() }),
+  z.object({ type: z.literal('dropSet'), ...slot, index: z.number().int().min(0).max(19).optional(), kind: z.enum(['warmup', 'upper', 'lower']).optional() }),
   z.object({ type: z.literal('completeExercise'), ...slot, rir: blankableNumber(3, true) }),
-  z.object({ type: z.literal('saveWarmup'), ...slot, set: setSchema.nullable() }),
+  z.object({ type: z.literal('saveWarmup'), ...slot, kind: z.enum(['warmup', 'upper', 'lower']).optional(), set: setSchema.nullable() }),
   z.object({ type: z.literal('substitute'), ...slot, exerciseId: key, variant: variation, recurring: z.boolean().optional() }),
   z.object({ type: z.literal('note'), ...slot, text }),
   z.object({ type: z.literal('habits'), date, data: habitsSchema }),
@@ -67,12 +76,23 @@ export type Command = z.infer<typeof commandSchema> | { type: 'syncProgramme'; d
 export type HabitLog = z.infer<typeof habitsSchema>;
 export type SetLog = z.infer<typeof setSchema> & { exerciseName?: string; perSide?: Exercise['perSide'] };
 export type CheckIn = z.infer<typeof checkInSchema> & { publishedAt?: string; publishingAt?: string; publishTarget?: DocTarget };
+export const extraKinds = ['warmup', 'upper', 'lower'] as const;
+export type ExtraKind = typeof extraKinds[number];
+export const extraIndex: Record<ExtraKind, number> = { warmup: -1, upper: -2, lower: -3 };
+export const extraLabel: Record<ExtraKind, string> = { warmup: 'Warm-up', upper: 'Upper', lower: 'Lower' };
+
 export type SlotLog = {
   exerciseId: string;
   variant: string;
   sets: Record<number, SetLog>;
+  setCount?: number;
   completion?: { completedAt: string; rir: number | null };
   warmup?: SetLog;
+  upper?: SetLog;
+  lower?: SetLog;
+  showWarmup?: boolean;
+  showUpper?: boolean;
+  showLower?: boolean;
   note: string;
 };
 export type Session = {
@@ -80,6 +100,8 @@ export type Session = {
   planId: string;
   startedAt: string;
   finishedAt?: string;
+  pausedAt?: string;
+  pausedMs?: number;
   plan?: Plan;
   slots: Record<string, SlotLog>;
 };
@@ -100,8 +122,34 @@ export const createData = (): TrainingData => ({ sessions: {}, habits: {}, check
 export const emptyHabits: HabitLog = { steps: null, water: null, sleep: null, nutrition: '', recovery: '' };
 export const sessionKey = (date: string, planId: string) => `${date}:${planId}`;
 
-export function firstOpenSet(exercise: Exercise, sets: SlotLog['sets']) {
-  return Array.from({ length: exercise.sets }, (_, index) => index).find((index) => !sets[index]);
+export function extraKindFor(index: number) {
+  return extraKinds.find((kind) => extraIndex[kind] === index);
+}
+
+export function workingSetCount(prescribed: number, log: Pick<SlotLog, 'sets' | 'setCount'>) {
+  const highest = Object.keys(log.sets).reduce((max, key) => {
+    const index = Number(key);
+    return Number.isInteger(index) && index >= 0 ? Math.max(max, index) : max;
+  }, -1);
+  return Math.min(20, Math.max(1, log.setCount ?? prescribed, highest + 1));
+}
+
+export function firstOpenSet(exercise: Exercise, log: Pick<SlotLog, 'sets' | 'setCount'>) {
+  const count = workingSetCount(exercise.sets, log);
+  return Array.from({ length: count }, (_, index) => index).find((index) => !log.sets[index]);
+}
+
+export function extraShown(log: Pick<SlotLog, ExtraKind | 'showWarmup' | 'showUpper' | 'showLower'>, kind: ExtraKind, barbell = false) {
+  if (log[kind]) return true;
+  const shown = kind === 'warmup' ? log.showWarmup : kind === 'upper' ? log.showUpper : log.showLower;
+  if (shown != null) return shown;
+  return kind === 'warmup' && barbell;
+}
+
+function showExtra(log: SlotLog, kind: ExtraKind, shown: boolean) {
+  if (kind === 'warmup') log.showWarmup = shown;
+  else if (kind === 'upper') log.showUpper = shown;
+  else log.showLower = shown;
 }
 
 const swapKey = (planId: string, exerciseId: string) => `${planId}:${exerciseId}`;
@@ -116,6 +164,14 @@ export function effectiveSlot(data: TrainingData, date: string, planId: string, 
 }
 
 export class TrainingValidationError extends Error {}
+
+function settlePause(session: Session, now: string) {
+  if (!session.pausedAt) return;
+  const total = (session.pausedMs ?? 0) + Math.max(0, Date.parse(now) - Date.parse(session.pausedAt));
+  if (total > 0) session.pausedMs = total;
+  else delete session.pausedMs;
+  delete session.pausedAt;
+}
 
 function checkSelection(data: TrainingData, date: string, exerciseId: string, variant: string, workout: Plan) {
   const exercise = programmeExercises(data, [workout, ...weekPlans(data, date)]).find((item) => item.id === exerciseId);
@@ -195,11 +251,31 @@ export function applyCommand(data: TrainingData, command: Command, now: string) 
     delete data.sessions[sessionId];
     return;
   }
+  if (command.type === 'pauseClock' || command.type === 'resumeClock' || command.type === 'resetClock' || command.type === 'restart') {
+    const existing = data.sessions[sessionId];
+    if (!existing) throw new TrainingValidationError('Start the workout before changing the clock.');
+    if (existing.finishedAt) throw new TrainingValidationError('This workout is already submitted.');
+    if (command.type === 'pauseClock') {
+      existing.pausedAt ??= now;
+      return;
+    }
+    if (command.type === 'resumeClock') {
+      settlePause(existing, now);
+      return;
+    }
+    existing.startedAt = now;
+    delete existing.pausedMs;
+    if (command.type === 'resetClock' && existing.pausedAt) existing.pausedAt = now;
+    else delete existing.pausedAt;
+    if (command.type === 'restart') existing.slots = {};
+    return;
+  }
   const active = data.sessions[sessionId] ??= { date: command.date, planId: plan.id, plan, startedAt: now, slots: {} };
   if (command.type === 'finish') {
     if (!Object.values(active.slots).some((item) => Object.keys(item.sets).length)) {
       throw new TrainingValidationError('Log a set before finishing this workout.');
     }
+    settlePause(active, now);
     active.finishedAt ??= now;
   }
   if (command.type === 'start' || command.type === 'finish') return;
@@ -207,37 +283,72 @@ export function applyCommand(data: TrainingData, command: Command, now: string) 
   const original = plan.exercises.find((item) => item.id === command.slotId);
   if (!original) throw new TrainingValidationError('This exercise is not in the workout.');
   const log = active.slots[original.id] ??= effectiveSlot(data, command.date, plan.id, original);
+  const loggedOn = command.date;
+  const loggedPlan = plan;
+  function loggedSet(set: z.infer<typeof setSchema>, previous: { exerciseId: string; variant: string }) {
+    const selection = checkSelection(data, loggedOn, set.exerciseId, set.variant, loggedPlan);
+    if (previous.exerciseId !== set.exerciseId || previous.variant !== set.variant) {
+      throw new TrainingValidationError('The exercise selection changed. Reopen this set.');
+    }
+    if (selection.metric === 'seconds' ? !set.seconds || set.reps !== null || set.weight !== null :
+      !set.reps || set.seconds !== null || (selection.metric === 'bodyweight' && set.weight !== null)) {
+      throw new TrainingValidationError('Enter the reps or duration you completed.');
+    }
+    return { ...set, exerciseName: selection.name, perSide: selection.perSide };
+  }
+
   switch (command.type) {
-    case 'saveWarmup':
-    case 'putSet': {
-      const warmup = command.type === 'saveWarmup';
-      const set = command.set;
-      if (set === null) {
-        delete log.warmup;
+    case 'saveWarmup': {
+      const kind = command.kind ?? 'warmup';
+      if (command.set === null) {
+        delete log[kind];
         break;
       }
-      const selection = checkSelection(data, command.date, set.exerciseId, set.variant, plan);
-      const oldSet = warmup ? log.warmup : log.sets[command.index];
-      const expected = oldSet ?? log;
-      if (expected.exerciseId !== set.exerciseId || expected.variant !== set.variant) {
-        throw new TrainingValidationError('The exercise selection changed. Reopen this set.');
+      log[kind] = loggedSet(command.set, log[kind] ?? log);
+      break;
+    }
+    case 'putSet':
+      log.sets[command.index] = loggedSet(command.set, log.sets[command.index] ?? log);
+      break;
+    case 'addSet':
+      if (command.kind) showExtra(log, command.kind, true);
+      else {
+        const count = workingSetCount(original.sets, log);
+        if (count >= 20) throw new TrainingValidationError('Twenty sets is the limit.');
+        log.setCount = count + 1;
+        delete log.completion;
       }
-      if (selection.metric === 'seconds' ? !set.seconds || set.reps !== null || set.weight !== null :
-        !set.reps || set.seconds !== null || (selection.metric === 'bodyweight' && set.weight !== null)) {
-        throw new TrainingValidationError('Enter the reps or duration you completed.');
+      break;
+    case 'dropSet': {
+      if ((command.index == null) === (command.kind == null)) throw new TrainingValidationError('Choose a set to remove.');
+      if (command.kind) {
+        delete log[command.kind];
+        showExtra(log, command.kind, false);
+        break;
       }
-      const entry = { ...set, exerciseName: selection.name, perSide: selection.perSide };
-      if (warmup) log.warmup = entry;
-      else log.sets[command.index] = entry;
+      const count = workingSetCount(original.sets, log);
+      const index = command.index ?? 0;
+      if (index >= count) throw new TrainingValidationError('That set is not in this exercise.');
+      if (count <= 1) throw new TrainingValidationError('Keep at least one working set.');
+      const next: SlotLog['sets'] = {};
+      for (let position = 0; position < count; position += 1) {
+        if (position === index) continue;
+        const set = log.sets[position];
+        if (set) next[position > index ? position - 1 : position] = set;
+      }
+      log.sets = next;
+      log.setCount = count - 1;
+      if (firstOpenSet(original, log) !== undefined) delete log.completion;
+      if (!Object.values(active.slots).some((item) => Object.keys(item.sets).length)) delete active.finishedAt;
       break;
     }
     case 'removeSet':
       delete log.sets[command.index];
-      if (firstOpenSet(original, log.sets) !== undefined) delete log.completion;
+      if (firstOpenSet(original, log) !== undefined) delete log.completion;
       if (!Object.values(active.slots).some((item) => Object.keys(item.sets).length)) delete active.finishedAt;
       break;
     case 'completeExercise':
-      if (firstOpenSet(original, log.sets) !== undefined) {
+      if (firstOpenSet(original, log) !== undefined) {
         throw new TrainingValidationError('Log every working set before marking this exercise done.');
       }
       log.completion = { completedAt: log.completion?.completedAt ?? now, rir: command.rir };

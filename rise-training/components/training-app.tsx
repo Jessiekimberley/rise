@@ -33,9 +33,9 @@ async function post(path: string, body: unknown) {
   return result;
 }
 
-export function TrainingApp({ initial, today: initialToday, configuredDoc, docsReady, firstName, coachText }: {
+export function TrainingApp({ initial, today: initialToday, configuredDoc, docsReady, firstName }: {
   initial: TrainingSnapshot; today: string; configuredDoc?: DocTarget; docsReady: boolean;
-  firstName: string; coachText?: string;
+  firstName: string;
 }) {
   const router = useRouter();
   const [savedSnapshot, setSavedSnapshot] = useState<TrainingSnapshot>();
@@ -150,11 +150,11 @@ export function TrainingApp({ initial, today: initialToday, configuredDoc, docsR
     <main id="main-content">
       {tab === 'today' && <Today key={`${today}:${data.startedOn}`} today={today} data={data} firstName={firstName} openWorkout={openWorkout}
         openCheckIn={() => navigate('check-ins')} />}
-      {tab === 'train' && <Workout key={`${workoutDate}:${planId}`} date={workoutDate} today={today} planId={planId} data={data} coachText={coachText}
+      {tab === 'train' && <Workout key={`${workoutDate}:${planId}`} date={workoutDate} today={today} planId={planId} data={data}
         onOpen={pinWorkout} onLogToday={(id) => openWorkout(id, today)}
         onPlan={(id) => selectWorkout({ ...workout, planId: id, date: fixedWorkoutDate })}
-        mutate={mutate} onBack={() => navigate('today')} setFocused={setFocused} />}
-      {tab === 'habits' && <Habits date={today} />}
+        mutate={mutate} onBack={() => navigate('today')} onPreview={openWorkout} setFocused={setFocused} />}
+      {tab === 'habits' && <Habits key={today} date={today} log={data.habits[today]} mutate={mutate} />}
       {tab === 'check-ins' && <CheckIns key={today} date={today} data={data} mutate={mutate} docsReady={docsReady}
         destination={data.docs?.checkIns ?? configuredDoc} publish={(id) => request('/api/check-in/publish', { id })} setFocused={setFocused} done={() => navigate('today')} />}
     </main>

@@ -3,7 +3,7 @@ import { Inter_Tight, Newsreader } from 'next/font/google';
 import './styles.css';
 
 const inter = Inter_Tight({ subsets: ['latin'], weight: ['400', '500', '600'], variable: '--font-inter-tight' });
-const newsreader = Newsreader({ subsets: ['latin'], axes: ['opsz'], variable: '--font-newsreader' });
+const newsreader = Newsreader({ subsets: ['latin'], style: ['normal', 'italic'], axes: ['opsz'], variable: '--font-newsreader' });
 
 export const metadata: Metadata = {
   title: 'Rise Training', description: 'Your programme, training log and coach check-ins.',

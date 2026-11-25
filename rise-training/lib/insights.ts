@@ -1,5 +1,5 @@
-import type { Session, SetLog, TrainingData } from './model';
-import { canonicalVariant, findExercise, findPlan } from './programme';
+import type { HabitLog, Session, SetLog, TrainingData } from './model';
+import { canonicalVariant, findExercise, findPlan, habitTargets, type Exercise } from './programme';
 
 const trainingCalendar = new Intl.DateTimeFormat('sv-SE', { timeZone: 'Pacific/Auckland' });
 export const todayKey = (now = new Date()) => trainingCalendar.format(now);
@@ -31,6 +31,11 @@ export function scheduledProgrammeDay(date: string, data: Pick<TrainingData, 'st
 }
 
 export const restDisplay = (seconds: number) => `${Math.floor(seconds / 60)}:${String(seconds % 60).padStart(2, '0')}`;
+
+export function workoutElapsedMs(session: Pick<Session, 'startedAt' | 'finishedAt' | 'pausedAt' | 'pausedMs'>, now: number) {
+  const end = session.finishedAt ? Date.parse(session.finishedAt) : session.pausedAt ? Date.parse(session.pausedAt) : now;
+  return Math.max(0, end - Date.parse(session.startedAt) - (session.pausedMs ?? 0));
+}
 
 // Stored effort uses the existing RPE scale where 10 is zero reps in reserve.
 export const rirDisplay = (rir: number) => rir >= 3 ? '3+' : String(rir);
@@ -68,6 +73,18 @@ export function lastPerformance(data: TrainingData, before: string, exerciseId: 
   }
 }
 
+export function ordinal(value: number) {
+  const teen = value % 100;
+  if (teen >= 11 && teen <= 13) return `${value}th`;
+  return `${value}${['th', 'st', 'nd', 'rd'][value % 10] ?? 'th'}`;
+}
+
+export function workoutsThisWeek(data: TrainingData, date: string) {
+  const start = weekStart(date);
+  const end = addDays(start, 6);
+  return Object.values(data.sessions).filter((session) => session.finishedAt && session.date >= start && session.date <= end).length;
+}
+
 export function reportStats(data: TrainingData, start: string, end: string) {
   const habits = Object.entries(data.habits).filter(([date]) => date >= start && date <= end).map(([, value]) => value);
   function average(key: 'steps' | 'water' | 'sleep') {
@@ -92,23 +109,159 @@ export function progressPoints(data: TrainingData, exerciseId: string, variant: 
   return Array.from(dates, ([date, value]) => ({ date, value })).sort((a, b) => a.date.localeCompare(b.date));
 }
 
+const countFormat = new Intl.NumberFormat('en-NZ');
+export const formatCount = (value: number) => countFormat.format(value);
+export const goalSpan = (min: number, max: number) => `${formatCount(min)}–${formatCount(max)}`;
+export const formatHours = (value: number) => String(Math.round(value * 100) / 100);
+
+export function habitReport(habit: HabitLog | undefined) {
+  if (!habit) return '';
+  const lines: string[] = [];
+  if (habit.steps != null) lines.push(`Steps: ${formatCount(habit.steps)} (goal ${goalSpan(habitTargets.steps.min, habitTargets.steps.max)})`);
+  if (typeof habit.waterHitTarget === 'boolean') {
+    lines.push(`Water ${goalSpan(habitTargets.hydrationLitres.min, habitTargets.hydrationLitres.max)} L: ${habit.waterHitTarget ? 'Yes' : 'No'}`);
+  }
+  const sleepNote = habit.sleepNote?.trim();
+  if (habit.sleep != null || sleepNote) {
+    const hours = habit.sleep == null ? '' : `${formatHours(habit.sleep)} h (goal ${goalSpan(habitTargets.sleepHours.min, habitTargets.sleepHours.max)} h).`;
+    lines.push(`Sleep: ${[hours, sleepNote].filter(Boolean).join(' ')}`);
+  }
+  const fuel = habit.fuellingNote?.trim();
+  if (fuel) lines.push(`Fuelling: ${fuel}`);
+  return lines.length ? `Habits\n${lines.join('\n')}` : '';
+}
+
+export type ReportSet = {
+  exercise: string;
+  set: number;
+  weight: number | null;
+  reps: number | null;
+  perSide?: Exercise['perSide'];
+  seconds: number | null;
+  rir: string;
+};
+
+export type ReportDay = {
+  date: string;
+  order: number;
+  weekday: string;
+  heading: string;
+  workout: string;
+  inProgress: boolean;
+  sets: ReportSet[];
+  lines: string[];
+  text: string;
+};
+
+export const weekdayName = (date: string) => displayDate(date, { weekday: 'long' });
+export const dayHeading = (date: string) => `${weekdayName(date)}, ${displayDate(date)}`;
+
+export function setWork(set: ReportSet) {
+  if (set.seconds != null) return `${set.seconds}s`;
+  if (set.reps == null) return '';
+  return set.perSide ? `${set.reps}/${set.perSide}` : String(set.reps);
+}
+
+function namedExercise(set: SetLog) {
+  const exercise = findExercise(set.exerciseId);
+  const name = set.exerciseName ?? exercise?.name ?? set.exerciseId;
+  return { exercise, name: set.variant ? `${name} (${set.variant})` : name };
+}
+
+function reportSet(set: SetLog, index: number): ReportSet {
+  const { exercise, name } = namedExercise(set);
+  return {
+    exercise: name, set: index + 1, weight: set.weight, reps: set.reps, seconds: set.seconds,
+    perSide: set.seconds == null ? set.perSide ?? exercise?.perSide : undefined,
+    rir: set.effort != null ? rirDisplay(10 - set.effort) : '',
+  };
+}
+
+function collectDays(data: TrainingData, start: string, end: string): ReportDay[] {
+  const sessions = Object.values(data.sessions).filter((session) => session.date >= start && session.date <= end)
+    .sort((a, b) => a.date.localeCompare(b.date) || a.startedAt.localeCompare(b.startedAt));
+  const blocks: ReportDay[] = [];
+  for (const session of sessions) {
+    const sets: ReportSet[] = [];
+    const lines: string[] = [];
+    const details: string[] = [];
+    for (const [slotId, slot] of Object.entries(session.slots)) {
+      const slotName = session.plan?.exercises.find((exercise) => exercise.id === slotId)?.name ?? findExercise(slotId)?.name ?? slotId;
+      for (const [label, set] of [['warm-up', slot.warmup], ['upper', slot.upper], ['lower', slot.lower]] as const) {
+        if (!set) continue;
+        details.push(`${namedExercise(set).name}, ${label}: ${setLabel(set)}`);
+      }
+      for (const index of Object.keys(slot.sets).map(Number).sort((a, b) => a - b)) {
+        const row = reportSet(slot.sets[index], index);
+        sets.push(row);
+        details.push(`${row.exercise}, set ${row.set}: ${setLabel(slot.sets[index])}`);
+      }
+      if (slot.completion?.rir != null) {
+        const line = `${slotName} · final set RIR ${rirDisplay(slot.completion.rir)}`;
+        lines.push(line);
+        details.push(line);
+      }
+      const note = slot.note?.trim() ?? '';
+      if (note) {
+        const line = `${slotName} notes: ${note}`;
+        lines.push(line);
+        details.push(line);
+      }
+    }
+    if (!details.length) continue;
+    const workout = session.plan?.name ?? findPlan(session.planId)?.name ?? session.planId;
+    const inProgress = !session.finishedAt;
+    const heading = dayHeading(session.date);
+    blocks.push({
+      date: session.date, order: blocks.length, weekday: weekdayName(session.date), heading, workout, inProgress, sets, lines,
+      text: `${heading} · ${workout}${inProgress ? ' (in progress)' : ''}\n${details.join('\n')}`,
+    });
+  }
+  const lastOfDay = new Map<string, number>();
+  blocks.forEach((block, index) => lastOfDay.set(block.date, index));
+  const chunks = blocks.map((block, index) => {
+    if (lastOfDay.get(block.date) !== index) return block;
+    const habits = habitReport(data.habits[block.date]);
+    if (!habits) return block;
+    return { ...block, lines: [...block.lines, ...habits.split('\n')], text: `${block.text}\n${habits}` };
+  });
+  for (const [date, habit] of Object.entries(data.habits)) {
+    if (date < start || date > end || lastOfDay.has(date)) continue;
+    const habits = habitReport(habit);
+    if (!habits) continue;
+    chunks.push({
+      ...blankDay(date, chunks.length), lines: habits.split('\n'), text: `${dayHeading(date)}\n${habits}`,
+    });
+  }
+  chunks.sort((a, b) => a.date.localeCompare(b.date) || a.order - b.order);
+  return chunks;
+}
+
+function blankDay(date: string, order = 0): ReportDay {
+  return {
+    date, order, weekday: weekdayName(date), heading: dayHeading(date),
+    workout: '', inProgress: false, sets: [], lines: [], text: dayHeading(date),
+  };
+}
+
+export function datesThrough(start: string, end: string) {
+  if (start > end) return [];
+  const dates: string[] = [];
+  for (let date = start; date <= end; date = addDays(date, 1)) dates.push(date);
+  return dates;
+}
+
+export function blocksForDates(data: TrainingData, dates: string[]) {
+  const sorted = [...new Set(dates)].sort();
+  if (!sorted.length) return [];
+  const logged = collectDays(data, sorted[0], sorted[sorted.length - 1]).filter((day) => sorted.includes(day.date));
+  const seen = new Set(logged.map((day) => day.date));
+  return [...logged, ...sorted.filter((date) => !seen.has(date)).map((date) => blankDay(date))]
+    .sort((a, b) => a.date.localeCompare(b.date) || a.order - b.order);
+}
+
 export function buildReport(data: TrainingData, kind: 'midweek' | 'weekly', start: string, end: string) {
   const title = `${kind === 'midweek' ? 'Midweek' : 'Weekly'} training check-in · ${displayDate(start)}–${displayDate(end, { day: 'numeric', month: 'short', year: 'numeric' })}`;
-  const sessions = Object.values(data.sessions).filter((session) => session.date >= start && session.date <= end)
-    .sort((a, b) => a.date.localeCompare(b.date));
-  const lines = [];
-  for (const session of sessions) {
-    const details = [];
-    for (const [slotId, slot] of Object.entries(session.slots)) {
-      const name = session.plan?.exercises.find((exercise) => exercise.id === slotId)?.name ?? findExercise(slotId)?.name ?? slotId;
-      for (const [index, set] of Object.entries(slot.sets)) {
-        const exercise = findExercise(set.exerciseId);
-        details.push(`${set.exerciseName ?? exercise?.name ?? set.exerciseId}${set.variant ? ` (${set.variant})` : ''}, set ${Number(index) + 1}: ${setLabel(set)}`);
-      }
-      if (slot.completion?.rir != null) details.push(`${name} · final set RIR ${rirDisplay(slot.completion.rir)}`);
-      if (slot.note.trim()) details.push(`${name} notes: ${slot.note.trim()}`);
-    }
-    if (details.length) lines.push(`${displayDate(session.date)} · ${session.plan?.name ?? findPlan(session.planId)?.name ?? session.planId}${session.finishedAt ? '' : ' (in progress)'}\n${details.join('\n')}`);
-  }
-  return { title, text: lines.join('\n\n') };
+  const days = collectDays(data, start, end);
+  return { title, text: days.map((day) => day.text).join('\n\n'), days };
 }

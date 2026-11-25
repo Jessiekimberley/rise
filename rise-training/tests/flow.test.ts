@@ -6,7 +6,7 @@ import { join } from 'node:path';
 import test from 'node:test';
 import { PGlite } from '@electric-sql/pglite';
 import { appendCheckIn, type DocsConfig } from '../lib/google';
-import { buildReport, lastPerformance, progressPoints, scheduledProgrammeDay, temporarySchedule, todayKey, trainingWeekStart, weekStart } from '../lib/insights';
+import { blocksForDates, buildReport, lastPerformance, ordinal, progressPoints, scheduledProgrammeDay, temporarySchedule, todayKey, trainingWeekStart, weekStart, workoutElapsedMs, workoutsThisWeek } from '../lib/insights';
 import { applyCommand, commandSchema, createData, effectiveSlot, emptyHabits, sessionKey, type SetLog } from '../lib/model';
 import { plans, prescribedReps } from '../lib/programme';
 import { reviewProgramme } from '../lib/programme-review';
@@ -14,7 +14,7 @@ import { schema, trainingStore } from '../lib/storage';
 import { readWeeks, docTarget, type DocContent } from '../lib/coach-doc';
 import { programmeWeek, workoutPlan } from '../lib/weeks';
 import { scheduleRestChime } from '../lib/rest-audio';
-import { workoutCsv } from '../lib/workout-export';
+import { setsCsv, workoutCsv } from '../lib/workout-export';
 
 test('the training date rolls over at Auckland midnight in summer and winter', () => {
   assert.equal(todayKey(new Date('2026-11-24T10:59:59Z')), '2026-11-24');
@@ -55,6 +55,46 @@ test('an optional warm-up stays separate from work sets and strength history', (
   assert.deepEqual(progressPoints(data, 'squat', '', 'weight'), [{ date, value: 42.5 }]);
 });
 
+test('a set list can grow or shrink, and warm-up, upper, and lower stay out of the strength record', () => {
+  const data = createData();
+  const date = '2026-11-25';
+  const slot = { date, planId: 'lower-1', slotId: 'rdl' };
+  const now = `${date}T00:00:00Z`;
+  const set: SetLog = { exerciseId: 'rdl', variant: '', weight: 40, reps: 8, seconds: null, effort: null };
+  const log = () => data.sessions[sessionKey(date, slot.planId)].slots.rdl;
+
+  applyCommand(data, commandSchema.parse({ type: 'addSet', ...slot }), now);
+  assert.equal(log().setCount, 4);
+  applyCommand(data, { type: 'putSet', ...slot, index: 0, set }, now);
+  applyCommand(data, { type: 'putSet', ...slot, index: 2, set: { ...set, weight: 50 } }, now);
+  applyCommand(data, { type: 'putSet', ...slot, index: 3, set: { ...set, weight: 60 } }, now);
+  applyCommand(data, commandSchema.parse({ type: 'dropSet', ...slot, index: 0 }), now);
+  assert.equal(log().setCount, 3);
+  assert.equal(log().sets[0], undefined);
+  assert.equal(log().sets[1].weight, 50);
+  assert.equal(log().sets[2].weight, 60);
+
+  applyCommand(data, commandSchema.parse({ type: 'addSet', ...slot, kind: 'upper' }), now);
+  applyCommand(data, commandSchema.parse({ type: 'addSet', ...slot, kind: 'lower' }), now);
+  applyCommand(data, commandSchema.parse({ type: 'addSet', ...slot, kind: 'warmup' }), now);
+  applyCommand(data, { type: 'saveWarmup', ...slot, kind: 'upper', set: { ...set, weight: 200 } }, now);
+  applyCommand(data, { type: 'saveWarmup', ...slot, kind: 'lower', set: { ...set, weight: 30 } }, now);
+  assert.equal(log().upper?.weight, 200);
+  assert.equal(log().lower?.weight, 30);
+  assert.equal(log().showWarmup, true);
+  assert.deepEqual(progressPoints(data, 'rdl', '', 'weight'), [{ date, value: 60 }]);
+
+  applyCommand(data, commandSchema.parse({ type: 'dropSet', ...slot, kind: 'upper' }), now);
+  assert.equal(log().upper, undefined);
+  assert.equal(log().showUpper, false);
+  assert.equal(log().lower?.weight, 30);
+  applyCommand(data, { type: 'dropSet', ...slot, index: 1 }, now);
+  applyCommand(data, { type: 'dropSet', ...slot, index: 0 }, now);
+  assert.equal(log().setCount, 1);
+  assert.throws(() => applyCommand(data, { type: 'dropSet', ...slot, index: 0 }, now), /at least one working set/);
+  assert.equal(commandSchema.safeParse({ type: 'addSet', ...slot, kind: 'cardio' }).success, false);
+});
+
 test('an unfinished workout can be discarded, and a submitted one cannot', () => {
   const data = createData();
   const date = '2026-11-18';
@@ -72,6 +112,149 @@ test('an unfinished workout can be discarded, and a submitted one cannot', () =>
   applyCommand(data, { type: 'finish', ...session }, now);
   assert.throws(() => applyCommand(data, { type: 'discard', ...session }, now), /already submitted/);
   assert.equal(data.sessions[key].finishedAt, now);
+});
+
+test('submitted workouts count inside their calendar week', () => {
+  const data = createData();
+  const set: SetLog = { exerciseId: 'leg-press', variant: '', weight: 40, reps: 8, seconds: null, effort: null };
+  function finish(date: string) {
+    const session = { date, planId: 'lower-1', slotId: 'leg-press' };
+    applyCommand(data, { type: 'putSet', ...session, index: 0, set }, `${date}T01:00:00Z`);
+    applyCommand(data, { type: 'finish', date, planId: 'lower-1' }, `${date}T02:00:00Z`);
+  }
+  finish('2026-11-22');
+  finish('2026-11-23');
+  applyCommand(data, { type: 'start', date: '2026-11-24', planId: 'upper-1' }, '2026-11-24T01:00:00Z');
+  finish('2026-11-25');
+  assert.equal(workoutsThisWeek(data, '2026-11-25'), 2);
+  assert.equal(workoutsThisWeek(data, '2026-11-22'), 1);
+  assert.equal(ordinal(1), '1st');
+  assert.equal(ordinal(2), '2nd');
+  assert.equal(ordinal(3), '3rd');
+  assert.equal(ordinal(4), '4th');
+  assert.equal(ordinal(11), '11th');
+  assert.equal(ordinal(13), '13th');
+  assert.equal(ordinal(21), '21st');
+});
+
+test('an open workout clock can be reset, and a restart clears its sets', () => {
+  const data = createData();
+  const date = '2026-11-25';
+  const now = `${date}T01:00:00Z`;
+  const later = `${date}T02:15:00Z`;
+  const session = { date, planId: 'lower-1' };
+  const key = sessionKey(date, session.planId);
+  const set: SetLog = { exerciseId: 'leg-press', variant: '', weight: 40, reps: 8, seconds: null, effort: null };
+  assert.throws(() => applyCommand(data, { type: 'resetClock', ...session }, now), /Start the workout/);
+  applyCommand(data, commandSchema.parse({ type: 'start', ...session }), now);
+  applyCommand(data, { type: 'putSet', ...session, slotId: 'leg-press', index: 0, set }, now);
+  applyCommand(data, commandSchema.parse({ type: 'resetClock', ...session }), later);
+  assert.equal(data.sessions[key].startedAt, later);
+  assert.equal(data.sessions[key].pausedAt, undefined);
+  assert.equal(data.sessions[key].slots['leg-press'].sets[0].weight, 40);
+
+  applyCommand(data, commandSchema.parse({ type: 'pauseClock', ...session }), later);
+  applyCommand(data, commandSchema.parse({ type: 'restart', ...session }), later);
+  assert.equal(data.sessions[key].startedAt, later);
+  assert.equal(data.sessions[key].pausedAt, undefined);
+  assert.equal(data.sessions[key].pausedMs, undefined);
+  assert.deepEqual(data.sessions[key].slots, {});
+
+  applyCommand(data, { type: 'putSet', ...session, slotId: 'leg-press', index: 0, set }, later);
+  applyCommand(data, { type: 'finish', ...session }, later);
+  assert.throws(() => applyCommand(data, { type: 'resetClock', ...session }, later), /already submitted/);
+  assert.throws(() => applyCommand(data, { type: 'restart', ...session }, later), /already submitted/);
+  assert.equal(data.sessions[key].slots['leg-press'].sets[0].weight, 40);
+});
+
+test('a stopped workout clock keeps the gym time and a paused reset stays at zero', () => {
+  const data = createData();
+  const date = '2026-11-25';
+  const start = `${date}T01:00:00.000Z`;
+  const paused = `${date}T01:10:00.000Z`;
+  const resumed = `${date}T01:40:00.000Z`;
+  const session = { date, planId: 'lower-1' };
+  const key = sessionKey(date, session.planId);
+  const minutes = (count: number) => count * 60 * 1000;
+
+  assert.throws(() => applyCommand(data, { type: 'pauseClock', ...session }, start), /Start the workout/);
+  assert.throws(() => applyCommand(data, { type: 'resumeClock', ...session }, start), /Start the workout/);
+  applyCommand(data, commandSchema.parse({ type: 'start', ...session }), start);
+  applyCommand(data, commandSchema.parse({ type: 'pauseClock', ...session }), paused);
+  applyCommand(data, commandSchema.parse({ type: 'pauseClock', ...session }), resumed);
+  const open = data.sessions[key];
+  assert.equal(open.startedAt, start);
+  assert.equal(open.pausedAt, paused);
+  assert.equal(open.pausedMs, undefined);
+  assert.equal(workoutElapsedMs(open, Date.parse(resumed)), minutes(10));
+
+  applyCommand(data, commandSchema.parse({ type: 'resumeClock', ...session }), resumed);
+  applyCommand(data, commandSchema.parse({ type: 'resumeClock', ...session }), `${date}T01:50:00.000Z`);
+  assert.equal(open.pausedAt, undefined);
+  assert.equal(open.pausedMs, minutes(30));
+  assert.equal(workoutElapsedMs(open, Date.parse(resumed)), minutes(10));
+  assert.equal(workoutElapsedMs(open, Date.parse(`${date}T01:45:00.000Z`)), minutes(15));
+
+  applyCommand(data, commandSchema.parse({ type: 'pauseClock', ...session }), `${date}T01:50:00.000Z`);
+  applyCommand(data, commandSchema.parse({ type: 'resetClock', ...session }), `${date}T02:00:00.000Z`);
+  assert.equal(open.startedAt, `${date}T02:00:00.000Z`);
+  assert.equal(open.pausedAt, `${date}T02:00:00.000Z`);
+  assert.equal(open.pausedMs, undefined);
+  assert.equal(workoutElapsedMs(open, Date.parse(`${date}T02:30:00.000Z`)), 0);
+
+  applyCommand(data, commandSchema.parse({ type: 'resumeClock', ...session }), `${date}T02:05:00.000Z`);
+  const set: SetLog = { exerciseId: 'leg-press', variant: '', weight: 40, reps: 8, seconds: null, effort: null };
+  applyCommand(data, { type: 'putSet', ...session, slotId: 'leg-press', index: 0, set }, `${date}T02:10:00.000Z`);
+  applyCommand(data, commandSchema.parse({ type: 'pauseClock', ...session }), `${date}T02:20:00.000Z`);
+  applyCommand(data, { type: 'finish', ...session }, `${date}T02:35:00.000Z`);
+  assert.equal(open.finishedAt, `${date}T02:35:00.000Z`);
+  assert.equal(open.pausedAt, undefined);
+  assert.equal(open.pausedMs, minutes(20));
+  assert.equal(open.slots['leg-press'].sets[0].weight, 40);
+  assert.equal(workoutElapsedMs(open, Date.parse(`${date}T03:00:00.000Z`)), minutes(15));
+  assert.throws(() => applyCommand(data, { type: 'pauseClock', ...session }, `${date}T03:00:00.000Z`), /already submitted/);
+  assert.throws(() => applyCommand(data, { type: 'resumeClock', ...session }, `${date}T03:00:00.000Z`), /already submitted/);
+});
+
+test('logged habits sit on the day’s record and under that day’s workout notes', () => {
+  const date = '2026-11-25';
+  const now = `${date}T01:00:00Z`;
+  const data = createData();
+  assert.equal(buildReport(data, 'weekly', date, date).text, '');
+  const logged = {
+    steps: 8640, waterHitTarget: true, sleep: 7.5,
+    sleepNote: 'Woke once around 3am, still felt rested.',
+    fuellingNote: 'Oats and eggs before training, big rice bowl after.',
+  };
+  assert.equal(commandSchema.safeParse({ type: 'patchHabits', date, data: logged }).success, true);
+  applyCommand(data, { type: 'patchHabits', date, data: logged }, now);
+  const habits = [
+    'Wednesday, 25 Nov',
+    'Habits',
+    'Steps: 8,640 (goal 8,000–10,000)',
+    'Water 3–4 L: Yes',
+    'Sleep: 7.5 h (goal 7–8 h). Woke once around 3am, still felt rested.',
+    'Fuelling: Oats and eggs before training, big rice bowl after.',
+  ].join('\n');
+  assert.equal(buildReport(data, 'weekly', date, date).text, habits);
+
+  const session = { date, planId: 'lower-1' };
+  const set: SetLog = { exerciseId: 'leg-press', variant: '', weight: 40, reps: 8, seconds: null, effort: null };
+  applyCommand(data, { type: 'putSet', ...session, slotId: 'leg-press', index: 0, set }, now);
+  applyCommand(data, { type: 'note', ...session, slotId: 'leg-press', text: 'Felt steady.' }, now);
+  const withWorkout = buildReport(data, 'weekly', date, date).text;
+  assert.match(withWorkout, /Leg Press notes: Felt steady\.\nHabits\nSteps: 8,640/);
+
+  const id = 'da9a7572-7f8e-440a-9012-36004e1f47eb';
+  applyCommand(data, { type: 'checkIn', data: { id, kind: 'weekly', start: date, end: date, text: withWorkout } }, now);
+  applyCommand(data, { type: 'markPublished', id, text: withWorkout }, now);
+  applyCommand(data, { type: 'patchHabits', date, data: { waterHitTarget: false } }, now);
+  assert.equal(data.checkIns[id].text, withWorkout);
+  assert.match(buildReport(data, 'weekly', date, date).text, /Water 3–4 L: No/);
+  assert.doesNotMatch(data.checkIns[id].text, /Water 3–4 L: No/);
+
+  applyCommand(data, { type: 'patchHabits', date, data: { steps: null, waterHitTarget: null, sleep: null, sleepNote: null, fuellingNote: null } }, now);
+  assert.doesNotMatch(buildReport(data, 'weekly', date, date).text, /Habits/);
 });
 
 test('workout, concurrent set saves, habits and coach report survive a database restart', async () => {
@@ -122,12 +305,25 @@ test('workout, concurrent set saves, habits and coach report survive a database 
     assert.deepEqual(plans.map(({ day }) => day), [1, 2, 4, 5]);
     const report = buildReport(snapshot.data, 'weekly', date, '2026-11-25');
     assert.match(report.title, /^Weekly training check-in/);
+    assert.match(report.text, /Monday, 23 Nov · /);
+    assert.equal(report.days[0]?.weekday, 'Monday');
+    assert.equal(report.days[0]?.sets.find((set) => set.set === 2)?.weight, 47.5);
     assert.match(report.text, /Leg Press, set 2: 47.5 kg · 8 reps · RIR 2/);
     assert.match(report.text, /Back squat \(Barbell\), set 3/);
     assert.match(report.text, /Leg Press · final set RIR 3\+/);
     assert.equal(snapshot.data.habits[date].steps, 9100);
-    assert.doesNotMatch(report.text, /steps/);
+    assert.match(report.text, /Habits\nSteps: 9,100 \(goal 8,000–10,000\)\nSleep: 7\.5 h \(goal 7–8 h\)\./);
     assert.doesNotMatch(report.text, /Daily habits/);
+    assert.doesNotMatch(report.text, /Water/);
+    assert.doesNotMatch(report.text, /Ate before training/);
+    assert.doesNotMatch(report.text, /Good energy/);
+    const selected = blocksForDates(snapshot.data, [date, '2026-11-24', '2026-11-25']);
+    assert.equal(selected.find((day) => day.date === '2026-11-24')?.sets.length, 0);
+    const sets = setsCsv(selected);
+    assert.match(sets, /^\uFEFF"Day","Workout","Status","Exercise"/);
+    assert.match(sets, /"Monday, 23 Nov 2026","Lower body","Finished","Leg Press",2,47\.5,"8","2"/);
+    assert.match(sets, /"Tuesday, 24 Nov 2026"(,""){7},"No sets logged"/);
+    assert.ok(sets.includes('Leg Press notes'));
     const csv = workoutCsv(snapshot.data);
     assert.match(csv, /^\uFEFF"Workout date","Workout","Programme day","Status"/);
     assert.match(csv, /"2026-11-23",[^\r\n]+"Finished",[^\r\n]+"Back squat","Barbell","Warm-up",,20,8/);

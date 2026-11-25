@@ -1,16 +1,139 @@
 'use client';
 
 import { Check, ChevronLeft, ChevronRight } from 'lucide-react';
-import { useEffect, useState } from 'react';
-import { addDays, buildReport, displayDate, trainingWeekStart } from '@/lib/insights';
+import { useEffect, useId, useState } from 'react';
+import { addDays, blocksForDates, buildReport, datesThrough, dayHeading, displayDate, setWork, trainingWeekStart, type ReportDay, type ReportSet } from '@/lib/insights';
 import type { CheckIn, TrainingData, TrainingSnapshot } from '@/lib/model';
 import { docUrl, type DocTarget } from '@/lib/coach-doc';
+import { setsCsv } from '@/lib/workout-export';
 import { WeeklyCheckInLink } from './weekly-check-in';
-import { HeadingSentence, Pill, PrimaryButton, RoundButton, Row, RowStack } from './ui';
+import { BottomSheet, HeadingSentence, Pill, PrimaryButton, RoundButton, Row, RowStack } from './ui';
 import type { Mutate } from './training-app';
 
 const dateWords = { weekday: 'long', day: 'numeric', month: 'long' } as const;
 const errorMessage = (reason: unknown) => reason instanceof Error ? reason.message : 'Could not update the log. Try again.';
+
+function workCell(set: ReportSet) {
+  return setWork(set) || '—';
+}
+
+function dayMeta(day: ReportDay) {
+  const count = day.sets.length;
+  return [day.inProgress ? 'In progress' : '', count ? `${count} ${count === 1 ? 'set' : 'sets'}` : ''].filter(Boolean).join(' · ');
+}
+
+function dayTitle(day: ReportDay) {
+  if (day.workout) return `${day.heading} · ${day.workout}`;
+  if (day.lines.length) return `${day.heading} · Habits`;
+  return day.heading;
+}
+
+function LogDay({ day }: { day: ReportDay }) {
+  const showRir = day.sets.some((set) => set.rir);
+  const timed = day.sets.length > 0 && day.sets.every((set) => set.seconds != null);
+  const meta = dayMeta(day);
+  return <details className="log-day" onToggle={(event) => {
+    if (event.currentTarget.open) event.currentTarget.scrollIntoView({ block: 'nearest' });
+  }}>
+    <summary>
+      <span className="log-day-copy">
+        <span className="log-day-date">{dayTitle(day)}</span>
+        {meta && <span className="log-day-meta">{meta}</span>}
+      </span>
+      <ChevronRight size={18} aria-hidden="true" />
+    </summary>
+    <div className="log-day-body">
+      {day.sets.length > 0 && <table className="log-table" aria-label={dayTitle(day)}>
+        <thead>
+          <tr>
+            <th scope="col">Exercise</th>
+            <th className="col-set" scope="col">Set</th>
+            <th className="col-kg" scope="col">kg</th>
+            <th className="col-reps" scope="col">{timed ? 'Time' : 'Reps'}</th>
+            {showRir && <th className="col-rir" scope="col">RIR</th>}
+          </tr>
+        </thead>
+        <tbody>
+          {day.sets.map((set, index) => <tr key={`${set.exercise}-${set.set}-${index}`}>
+            <th scope="row">{set.exercise}</th>
+            <td>{set.set}</td>
+            <td>{set.weight == null ? '—' : set.weight}</td>
+            <td>{workCell(set)}</td>
+            {showRir && <td>{set.rir || '—'}</td>}
+          </tr>)}
+        </tbody>
+      </table>}
+      {day.lines.length > 0 && <div className="log-notes">{day.lines.map((line, index) => <p key={index}>{line}</p>)}</div>}
+    </div>
+  </details>;
+}
+
+function exportDetail(date: string, days: ReportDay[]) {
+  const mine = days.filter((day) => day.date === date && (day.sets.length || day.lines.length));
+  if (!mine.length) return 'No sets logged';
+  return mine.map((day) => {
+    const name = day.workout || 'Habits';
+    const count = day.sets.length ? ` · ${day.sets.length} ${day.sets.length === 1 ? 'set' : 'sets'}` : '';
+    return `${name}${day.inProgress ? ' · in progress' : ''}${count}`;
+  }).join(', ');
+}
+
+function downloadCsv(name: string, csv: string) {
+  const url = URL.createObjectURL(new Blob([csv], { type: 'text/csv;charset=utf-8' }));
+  const link = document.createElement('a');
+  link.href = url;
+  link.download = name;
+  document.body.appendChild(link);
+  link.click();
+  link.remove();
+  URL.revokeObjectURL(url);
+}
+
+function exportName(chosen: string[], week: string[]) {
+  const sorted = [...chosen].sort();
+  if (sorted.length === 1) return `rise-sets-${sorted[0]}.csv`;
+  if (sorted.length === week.length && sorted.every((date, index) => date === week[index])) return `rise-sets-week-${week[0]}.csv`;
+  return `rise-sets-${sorted[0]}-to-${sorted[sorted.length - 1]}.csv`;
+}
+
+function ExportSets({ data, week, onClose }: { data: TrainingData; week: string[]; onClose: () => void }) {
+  const titleId = useId();
+  const days = blocksForDates(data, week);
+  const logged = week.filter((date) => days.some((day) => day.date === date && (day.sets.length || day.lines.length)));
+  const [picked, setPicked] = useState(() => new Set(logged));
+
+  function save(dates: string[]) {
+    const chosen = [...dates].sort();
+    if (!chosen.length) return;
+    downloadCsv(exportName(chosen, week), setsCsv(blocksForDates(data, chosen)));
+    onClose();
+  }
+
+  function toggle(date: string) {
+    setPicked((current) => {
+      const next = new Set(current);
+      if (next.has(date)) next.delete(date);
+      else next.add(date);
+      return next;
+    });
+  }
+
+  return <BottomSheet labelId={titleId} onClose={onClose}>
+    <h2 id={titleId} className="heading-sentence heading-small">Export sets</h2>
+    <p className="fine">Choose days, or export the whole week. This downloads a spreadsheet.</p>
+    <div className="export-days" role="group" aria-label="Days to export">
+      {week.map((date) => <label key={date} className="export-day">
+        <input type="checkbox" checked={picked.has(date)} onChange={() => toggle(date)} />
+        <span className="export-day-copy">
+          <span className="export-day-name">{dayHeading(date)}</span>
+          <span className="export-day-detail">{exportDetail(date, days)}</span>
+        </span>
+      </label>)}
+    </div>
+    <PrimaryButton onClick={() => save([...picked])} disabled={!picked.size}>Export selected days</PrimaryButton>
+    <PrimaryButton className="button-quiet" onClick={() => save(week)}>Export whole week</PrimaryButton>
+  </BottomSheet>;
+}
 
 function sentEntries(data: TrainingData) {
   return Object.values(data.checkIns).filter((entry) => entry.publishedAt)
@@ -114,10 +237,12 @@ export function CheckIns({ date, data, mutate, publish, destination, docsReady, 
   const [receipt, setReceipt] = useState<CheckIn>();
   const [editingId, setEditingId] = useState<string>();
   const [draft, setDraft] = useState<string | null>(null);
+  const [exporting, setExporting] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
   const start = trainingWeekStart(date, data.startedOn);
   const weekEnd = addDays(start, 6);
+  const week = datesThrough(start, weekEnd);
   const end = date < weekEnd ? date : weekEnd;
   const report = buildReport(data, 'weekly', start, end);
   const text = draft ?? report.text;
@@ -183,13 +308,20 @@ export function CheckIns({ date, data, mutate, publish, destination, docsReady, 
       <p className="fine">{displayDate(date, dateWords)}</p>
       <HeadingSentence className="heading-32" lead="Check-in." follow="Sets and reps for Brenna." />
     </header>
-    <section className="doc-preview" aria-label="Training log">
-      <h2>{report.title}</h2>
-      <span className="fine">Change the text before you send it.</span>
-      <textarea value={text} maxLength={24_000} placeholder="No sets logged for this week yet." aria-label="This week's log" disabled={busy}
-        onChange={(event) => setDraft(event.target.value)} />
-      {draft !== null && draft !== report.text && <Pill onClick={() => setDraft(null)}>Use latest sets</Pill>}
+    <section className="log-week" aria-label="Training log">
+      <h2 className="log-week-title">{report.title}</h2>
+      {report.days.length ? <div className="log-days">{report.days.map((day) => <LogDay key={`${day.date}:${day.order}`} day={day} />)}</div>
+        : <p className="fine">No sets logged for this week yet.</p>}
     </section>
+    <details className="disclosure">
+      <summary>Edit the message</summary>
+      <section className="doc-preview">
+        <span className="fine">Change the text before you send it.</span>
+        <textarea className="log-message" value={text} maxLength={24_000} placeholder="No sets logged for this week yet." aria-label="Message for the coaching Doc" disabled={busy}
+          onChange={(event) => setDraft(event.target.value)} />
+        {draft !== null && draft !== report.text && <Pill onClick={() => setDraft(null)}>Use latest sets</Pill>}
+      </section>
+    </details>
     {error && <p className="notice" role="alert">{error}</p>}
     {!docsReady && <p className="fine">Google Docs isn’t connected yet. Your sets stay saved in the app.</p>}
     {docsReady && !destination && <p className="fine">The coaching Doc isn’t connected yet. Your sets stay saved in the app.</p>}
@@ -197,8 +329,10 @@ export function CheckIns({ date, data, mutate, publish, destination, docsReady, 
       <PrimaryButton onClick={() => void send()} disabled={busy || !canSend}>
         {busy ? 'Sending…' : 'Send to coaching doc'}
       </PrimaryButton>
+      <PrimaryButton className="button-quiet" onClick={() => setExporting(true)} disabled={busy}>Export</PrimaryButton>
       <WeeklyCheckInLink />
     </div>
+    {exporting && <ExportSets data={data} week={week} onClose={() => setExporting(false)} />}
     <details className="disclosure supplementary">
       <summary>Previous logs</summary>
       {destination && <div className="check-in-extras"><Pill href={docUrl(destination)}>Open coaching Doc</Pill></div>}

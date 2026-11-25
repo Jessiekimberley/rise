@@ -34,6 +34,12 @@ const savedIds: Record<string, string> = {
 };
 
 export const programmeDays = programme.days;
+
+export function dayKind(type: string) {
+  if (type === 'cardio') return 'cardio';
+  if (type === 'active-rest') return 'rest';
+  return 'strength';
+}
 export const habitTargets = programme.habits;
 
 export const plans: Plan[] = programmeDays.flatMap((day) => {
