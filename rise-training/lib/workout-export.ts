@@ -118,6 +118,7 @@ export function setsPdf(days: ReportDay[]) {
   let headerOnPage = false;
   let showRir = false;
   let workLabel = 'Reps';
+  let previousExercise = '';
 
   const place = (value: string, x: number, size: number, color: Rgb, bold = false) => {
     pdf.text(cursor.page, value, x, cursor.y, size, color, bold);
@@ -165,6 +166,16 @@ export function setsPdf(days: ReportDay[]) {
   };
   const drawSet = (set: ReportSet) => {
     const column = columns();
+    const breakBefore = previousExercise !== '' && set.exercise !== previousExercise;
+    previousExercise = set.exercise;
+    if (breakBefore) {
+      if (cursor.y - (headerOnPage ? 36 : 54) < pageBottom) nextPage();
+      else {
+        cursor.y -= 6;
+        pdf.line(cursor.page, left, right, cursor.y, [0.62, 0.61, 0.58], 1.15);
+        cursor.y -= 12;
+      }
+    }
     const lines = wrapText(set.exercise, 10, column.exerciseWidth - 10);
     const shown = lines.length ? lines : [set.exercise];
     shown.forEach((line, lineIndex) => {
@@ -217,6 +228,7 @@ export function setsPdf(days: ReportDay[]) {
       showRir = day.sets.some((set) => set.rir);
       workLabel = day.sets.every((set) => set.seconds != null) ? 'Time' : 'Reps';
       headerOnPage = false;
+      previousExercise = '';
       for (const set of day.sets) drawSet(set);
     }
     if (day.lines.length) cursor.y -= 4;
@@ -302,7 +314,12 @@ export function setsWorkbook(days: ReportDay[]) {
       rows.push({ height: 18, merge: true, cells: across('No sets logged', cellStyle.note) });
       continue;
     }
+    let previousExercise = '';
     for (const set of day.sets) {
+      if (previousExercise && set.exercise !== previousExercise) {
+        rows.push({ height: 8, merge: true, cells: across('', cellStyle.plain) });
+      }
+      previousExercise = set.exercise;
       rows.push({
         height: 20, merge: false, cells: [
           { style: cellStyle.text, text: set.exercise },

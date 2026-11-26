@@ -21,5 +21,5 @@ export default async function Home() {
   const initials = ((parts[0]?.[0] ?? '') + (parts.length > 1 ? parts[parts.length - 1]?.[0] ?? '' : '')).toUpperCase();
   return <TrainingApp initial={trainingLogView(snapshot, true)} programme={sharedProgramme} today={today} configuredDoc={configuredDoc}
     docsReady={Boolean(process.env.GOOGLE_SERVICE_ACCOUNT_JSON)}
-    initials={initials} />;
+    initials={initials} firstName={parts[0] ?? ''} />;
 }

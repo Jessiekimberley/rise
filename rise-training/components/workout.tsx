@@ -3,7 +3,7 @@
 import { Check, ChevronLeft, Clock3, Play, Square } from 'lucide-react';
 import { useLayoutEffect, useRef, useState } from 'react';
 import { addDays, compactSet, displayDate, lastPerformance, ordinal, restDisplay, scheduledProgrammeDay, weekStart, workoutElapsedMs, workoutsDoneThisWeek, workoutsThisWeek } from '@/lib/insights';
-import { effectiveSlot, extraIndex, extraKindFor, extraKinds, extraShown, firstOpenSet, sessionKey, workingSetCount, type ExtraKind, type Session, type SetLog, type TrainingData } from '@/lib/model';
+import { effectiveSlot, extraIndex, extraKindFor, extraKinds, extraShown, firstOpenSet, orderedSlots, sessionKey, workingSetCount, type ExtraKind, type Session, type SetLog, type TrainingData } from '@/lib/model';
 import { revisionCovering, type ProgrammeSnapshot } from '@/lib/prescription';
 import { canonicalVariant, dayKind, dayTitle, prescribedReps, programmeDays, type Exercise, type Plan } from '@/lib/programme';
 import { programmeExercises, weekPlans, workoutPlan } from '@/lib/weeks';
@@ -215,13 +215,14 @@ export function Workout({ date, today, planId, onPlan, onOpen, onLogToday, data,
     return <LoggedWorkout plan={plan} session={session} data={data} programme={programme} today={today} onBack={onBack} onPreview={onPreview} />;
   }
 
+  const performed = new Map((session ? orderedSlots(session) : []).map(([id], index) => [id, index]));
   const slots = plan.exercises.map((original) => {
     const log = effectiveSlot(data, date, plan.id, original);
     const exercise = roster.find((item) => item.id === log.exerciseId) ?? original;
     const index = firstOpenSet(original, log);
     const done = index === undefined && Boolean(log.completion || session?.finishedAt);
     return { original, log, exercise, index, done };
-  });
+  }).sort((a, b) => (performed.get(a.original.id) ?? 1_000) - (performed.get(b.original.id) ?? 1_000));
   const next = slots.find((slot) => !slot.done);
   const completed = slots.filter((slot) => slot.done).length;
   const hasSets = slots.some(({ log }) => Object.keys(log.sets).length);
@@ -433,7 +434,7 @@ export function Workout({ date, today, planId, onPlan, onOpen, onLogToday, data,
     </div>
     <HeadingSentence lead={`${dayTitle(plan)}.`} />
     <p className="overview-progress" role="status">{session ? `${completed} of ${slots.length} exercises done` : `Day ${plan.day} · ${slots.length} exercises`}</p>
-    <RowStack>
+    <RowStack className="workout-exercises">
       {slots.map(({ original, exercise, log, index, done }) => {
         const prior = lastPerformance(data, date, exercise.id, log.variant)?.sets.at(-1);
         const upcoming = session && !session.finishedAt && next?.original.id === original.id;

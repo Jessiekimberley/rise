@@ -60,6 +60,7 @@ svg { flex-shrink: 0; }
 .notice { padding: 10px 14px; border-radius: 16px; color: var(--color-error); background: var(--color-surface); overflow-wrap: anywhere; }
 
 .row-stack { display: flex; flex-direction: column; gap: var(--row-gap); min-width: 0; }
+.workout-exercises { gap: 10px; }
 .row {
   display: flex; width: 100%; align-items: center; justify-content: space-between; gap: 10px;
   min-height: 56px; padding: 12px 12px 12px 20px;
@@ -408,6 +409,10 @@ button.pill, a.pill { min-height: var(--tap-min); }
 .screen-home .heading-sentence { margin: 2px 4px; }
 .home-heading > span, .again-sheet .heading-sentence > span { color: var(--color-ink-muted); }
 .home-bar { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+.home-layout-icon {
+  width: var(--button-round); height: var(--button-round); display: grid; place-items: center; flex: none;
+  border: 0; border-radius: 50%; padding: 0; background: transparent; color: var(--color-ink-soft);
+}
 .home-avatar {
   width: var(--button-round); height: var(--button-round); border-radius: 50%; background: var(--color-surface);
   display: grid; place-items: center; font-size: 14px; font-weight: 600;
@@ -653,8 +658,9 @@ button.pill, a.pill { min-height: var(--tap-min); }
 .log-day-date { font-size: var(--text-value); font-weight: 500; line-height: 1.25; }
 .log-day-meta { font-size: var(--text-label); color: var(--color-ink-muted); }
 .log-day-body { padding: 0 12px 14px; }
-.log-table { width: 100%; border-collapse: collapse; table-layout: fixed; font-size: 14px; font-variant-numeric: tabular-nums; }
+.log-table { width: 100%; border-collapse: separate; border-spacing: 0; table-layout: fixed; font-size: 14px; font-variant-numeric: tabular-nums; }
 .log-table th, .log-table td { padding: 8px 4px; border-bottom: 1px solid var(--color-hairline); vertical-align: top; text-align: right; }
+.log-table tr.log-exercise-start th, .log-table tr.log-exercise-start td { border-top: 2px solid var(--color-ink-faint); padding-top: 14px; }
 .log-table thead th { font-size: var(--text-micro); font-weight: 600; color: var(--color-ink-muted); }
 .log-table thead th:first-child, .log-table tbody th { text-align: left; font-weight: 500; color: var(--color-ink); overflow-wrap: anywhere; }
 .log-table thead th:first-child { font-weight: 600; color: var(--color-ink-muted); }
@@ -908,6 +914,7 @@ button.pill, a.pill { min-height: var(--tap-min); }
 .week-chev.is-open { transform: rotate(180deg); }
 .week-day-body { display: grid; gap: 16px; padding: 0 16px 16px; }
 .week-set { display: grid; gap: 4px; padding: 8px 12px; border-radius: 12px; background: #F6F5F3; font-size: 13px; }
+.week-set + .week-set { margin-top: 8px; }
 .week-set span:first-child { font-weight: 600; }
 .week-set span:last-child { font-variant-numeric: tabular-nums; }
 .week-notes, .week-check { display: flex; flex-direction: column; gap: 10px; }

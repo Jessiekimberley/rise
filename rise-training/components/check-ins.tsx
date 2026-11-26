@@ -109,13 +109,16 @@ function LogDay({ day, mutate, noted }: { day: ReportDay; mutate: Mutate; noted:
           </tr>
         </thead>
         <tbody>
-          {day.sets.map((set, index) => <tr key={`${set.exercise}-${set.set}-${index}`}>
-            <th scope="row">{set.exercise}</th>
-            <td>{set.set}</td>
-            <td>{set.weight == null ? '—' : set.weight}</td>
-            <td>{workCell(set)}</td>
-            {showRir && <td>{set.rir || '—'}</td>}
-          </tr>)}
+          {day.sets.map((set, index) => {
+            const nextExercise = index > 0 && day.sets[index - 1].exercise !== set.exercise;
+            return <tr key={`${set.exercise}-${set.set}-${index}`} className={nextExercise ? 'log-exercise-start' : undefined}>
+              <th scope="row">{set.exercise}</th>
+              <td>{set.set}</td>
+              <td>{set.weight == null ? '—' : set.weight}</td>
+              <td>{workCell(set)}</td>
+              {showRir && <td>{set.rir || '—'}</td>}
+            </tr>;
+          })}
         </tbody>
       </table>}
       {lines.length > 0 && <div className="log-notes">{lines.map((line, index) => <p key={index}>{line}</p>)}</div>}
