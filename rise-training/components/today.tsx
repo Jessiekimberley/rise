@@ -45,6 +45,14 @@ function homeDate(today: string) {
   return displayDate(today, { weekday: 'long', day: 'numeric', month: 'long' }).replace(/,/g, '');
 }
 
+function homeGreeting(now = new Date()) {
+  const hour = Number(new Intl.DateTimeFormat('en-GB', {
+    timeZone: 'Pacific/Auckland', hour: '2-digit', hourCycle: 'h23',
+  }).format(now));
+  const part = hour < 12 ? 'morning' : hour < 17 ? 'afternoon' : 'evening';
+  return `Good ${part} Jessie.`;
+}
+
 type DayPhoto = { src: string; position?: string };
 const originals: DayPhoto[] = ['glass', 'shoulder', 'swim', 'liquid', 'blur', 'thermal', 'night'].map((name) => ({ src: `${name}.webp` }));
 const added: DayPhoto[] = [
@@ -165,7 +173,7 @@ function GridHome({ today, data, programme, initials, openWorkout, openHabits, m
       <time className="home-date" dateTime={today}>{homeDate(today)}</time>
       <HomeLayoutSwitch layout={layout} onLayout={onLayout} />
     </div>
-    <HeadingSentence className="heading-small home-heading" lead="Pick today's." follow="Any order." />
+    <HeadingSentence className="heading-small home-heading" lead={homeGreeting()} />
     <div className="workout-grid" aria-label="Workouts this week">
       {days.map((day) => {
         const done = progress.done.get(day.day);
