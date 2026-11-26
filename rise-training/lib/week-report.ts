@@ -112,8 +112,10 @@ function workoutNumber(session: Session) {
   return session.plan?.day ?? findPlan(session.planId)?.day;
 }
 
-function loggedSets(slot: SlotLog) {
-  const extras: { set: SetLog; kind?: 'warm-up' | 'upper' | 'lower' }[] = [];
+type SetKind = 'warm-up' | 'upper' | 'lower';
+
+function loggedSets(slot: SlotLog): { set: SetLog; kind?: SetKind }[] {
+  const extras: { set: SetLog; kind?: SetKind }[] = [];
   if (slot.warmup) extras.push({ set: slot.warmup, kind: 'warm-up' });
   if (slot.upper) extras.push({ set: slot.upper, kind: 'upper' });
   if (slot.lower) extras.push({ set: slot.lower, kind: 'lower' });
@@ -121,7 +123,7 @@ function loggedSets(slot: SlotLog) {
   return [...extras, ...working.map((index) => ({ set: slot.sets[index] }))];
 }
 
-function formatSet(set: SetLog, kind?: 'warm-up' | 'upper' | 'lower') {
+function formatSet(set: SetLog, kind?: SetKind) {
   const effort = kind ? '' : set.effort != null ? ` (${rirDisplay(10 - set.effort)})` : '';
   const tag = kind ? ` (${kind})` : '';
   if (set.seconds != null) return `${set.seconds} s${effort}${tag}`;

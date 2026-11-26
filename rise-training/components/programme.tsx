@@ -1,40 +1,23 @@
 'use client';
 
-import { ChevronDown, ChevronUp } from 'lucide-react';
-import { useRef, useState } from 'react';
-import { displayDate } from '@/lib/insights';
+import { useCallback, useEffect, useRef, useState } from 'react';
+import { displayDate, weekStart } from '@/lib/insights';
 import type { TrainingData } from '@/lib/model';
 import {
-  blankExercise, contentBefore, duplicateDay, fromDraft, moveItem, programmeChanges, toDraft,
-  type CoachAuthor, type DayDraft, type ExerciseDraft, type ProgrammeContent, type ProgrammeHabits, type ProgrammeSnapshot,
+  contentBefore, fromDraft, programmeChanges, toDraft,
+  type CoachAuthor, type ProgrammeContent, type ProgrammeSnapshot,
 } from '@/lib/prescription';
 import { availableWeek } from '@/lib/weeks';
-import { ChipGroup, HeadingSentence, Pill, PrimaryButton, RoundButton, RowStack } from './ui';
+import { PlanEditor, type ProgrammeDraft } from './plan-editor';
+import { WeekControls, WeekReport } from './week-report';
+import { ChipGroup, Pill, PrimaryButton, RowStack } from './ui';
 
-type View = 'edit' | 'history' | 'messages';
-type Draft = {
-  effectiveFrom: string;
-  deload: boolean;
-  weekNote: string;
-  stepsMin: string;
-  stepsMax: string;
-  days: DayDraft[];
-  habits: ProgrammeHabits;
-};
+type View = 'week' | 'edit' | 'history' | 'messages';
+type Draft = ProgrammeDraft;
 
 const authors = [
   { value: 'jessie', label: 'Jessie' },
   { value: 'brenna', label: 'Brenna' },
-] as const;
-const dayKinds = [
-  { value: 'strength', label: 'Strength' },
-  { value: 'cardio', label: 'Cardio' },
-  { value: 'active-rest', label: 'Rest' },
-] as const;
-const modes = [
-  { value: 'reps', label: 'Reps' },
-  { value: 'bodyweight', label: 'Bodyweight' },
-  { value: 'time', label: 'Time' },
 ] as const;
 const errorMessage = (reason: unknown) => reason instanceof Error ? reason.message : 'Could not save the programme. Try again.';
 
@@ -56,81 +39,18 @@ function storedAuthor(): CoachAuthor {
   catch { return 'jessie'; }
 }
 
-function Field({ label, value, onChange, wide, multiline, inputMode }: {
-  label: string; value: string; onChange: (value: string) => void; wide?: boolean; multiline?: boolean; inputMode?: 'numeric' | 'decimal';
-}) {
-  return <label className={`input-group${wide ? ' span-2' : ''}`}>
-    <span>{label}</span>
-    {multiline
-      ? <textarea rows={2} value={value} maxLength={2_000} onChange={(event) => onChange(event.target.value)} />
-      : <input value={value} inputMode={inputMode} maxLength={80} onChange={(event) => onChange(event.target.value)} />}
-  </label>;
-}
-
-function ExerciseEditor({ exercise, onChange, onMove, onRemove, onReplace }: {
-  exercise: ExerciseDraft;
-  onChange: (patch: Partial<ExerciseDraft>) => void;
-  onMove: (direction: -1 | 1) => void;
-  onRemove: () => void;
-  onReplace: () => void;
-}) {
-  const [open, setOpen] = useState(false);
-  const reps = exercise.mode === 'time' ? exercise.target : `${exercise.repMin || '—'}${exercise.repMax && exercise.repMax !== exercise.repMin ? `–${exercise.repMax}` : ''}`;
-  return <article className="programme-exercise">
-    <div className="programme-exercise-head">
-      <button type="button" className="programme-exercise-toggle" aria-expanded={open} onClick={() => setOpen((value) => !value)}>
-        <span>{exercise.name || 'Exercise'}</span>
-        <small>{exercise.sets || '—'} × {reps}{exercise.per ? ` / ${exercise.per}` : ''}</small>
-      </button>
-      <span className="programme-actions">
-        <RoundButton className="round-muted" aria-label={`Move ${exercise.name} up`} onClick={() => onMove(-1)}><ChevronUp size={16} /></RoundButton>
-        <RoundButton className="round-muted" aria-label={`Move ${exercise.name} down`} onClick={() => onMove(1)}><ChevronDown size={16} /></RoundButton>
-      </span>
-    </div>
-    {open && <div className="programme-grid">
-      <Field wide label="Exercise" value={exercise.name} onChange={(name) => onChange({ name })} />
-      <ChipGroup className="span-2" label="How to log" value={exercise.mode} options={[...modes]} onChange={(mode) => onChange({ mode: mode as ExerciseDraft['mode'] })} />
-      <Field label="Warm-up sets" inputMode="numeric" value={exercise.warmupSets} onChange={(warmupSets) => onChange({ warmupSets })} />
-      <Field label="Working sets" inputMode="numeric" value={exercise.sets} onChange={(sets) => onChange({ sets })} />
-      {exercise.mode === 'time'
-        ? <Field wide label="Time" value={exercise.target} onChange={(target) => onChange({ target })} />
-        : <>
-          <Field label="Reps from" inputMode="numeric" value={exercise.repMin} onChange={(repMin) => onChange({ repMin })} />
-          <Field label="Reps to" inputMode="numeric" value={exercise.repMax} onChange={(repMax) => onChange({ repMax })} />
-          <label className="input-group"><span>Each side</span>
-            <select value={exercise.per} onChange={(event) => onChange({ per: event.target.value as ExerciseDraft['per'] })}>
-              <option value="">Together</option>
-              <option value="leg">Per leg</option>
-              <option value="side">Per side</option>
-            </select>
-          </label>
-        </>}
-      {exercise.mode !== 'bodyweight' && <Field label="Weight (kg)" inputMode="decimal" value={exercise.weight} onChange={(weight) => onChange({ weight })} />}
-      <Field label="Rest" value={exercise.rest} onChange={(rest) => onChange({ rest })} />
-      <Field label="Rest note" value={exercise.restNote} onChange={(restNote) => onChange({ restNote })} />
-      <Field label="RIR" inputMode="numeric" value={exercise.rir} onChange={(rir) => onChange({ rir })} />
-      <Field label="RPE" inputMode="numeric" value={exercise.rpe} onChange={(rpe) => onChange({ rpe })} />
-      <Field wide label="Equipment options" value={exercise.variants} onChange={(variants) => onChange({ variants })} />
-      <Field wide multiline label="Technique" value={exercise.cue} onChange={(cue) => onChange({ cue })} />
-      <Field wide multiline label="Coaching note" value={exercise.coachNote} onChange={(coachNote) => onChange({ coachNote })} />
-      <Field wide multiline label="Progression" value={exercise.progression} onChange={(progression) => onChange({ progression })} />
-      <span className="programme-actions span-2">
-        <Pill onClick={onReplace}>Replace</Pill>
-        <Pill onClick={onRemove}>Remove</Pill>
-      </span>
-    </div>}
-  </article>;
-}
-
-export function ProgrammeEditor({ today, data, programme, onSave }: {
+export function ProgrammeEditor({ today, data, programme, onSave, leaveGuard }: {
   today: string; data: TrainingData; programme: ProgrammeSnapshot;
   onSave: (body: unknown) => Promise<void>;
+  leaveGuard?: { current: () => boolean };
 }) {
   const source = currentContent(data, programme, today);
   const [draft, setDraft] = useState(() => draftFrom(source, today));
   const [seen, setSeen] = useState(programme.revision);
-  const [view, setView] = useState<View>('edit');
-  const [openDay, setOpenDay] = useState<string>();
+  const [view, setView] = useState<View>('week');
+  const [weekOf, setWeekOf] = useState(() => weekStart(today));
+  const [sheetOpen, setSheetOpen] = useState(false);
+  const onOverlay = useCallback((open: boolean) => setSheetOpen(open), []);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
   const [author, setAuthor] = useState<CoachAuthor>(storedAuthor);
@@ -145,26 +65,21 @@ export function ProgrammeEditor({ today, data, programme, onSave }: {
     setSeen(programme.revision);
   }
 
-  function updateDay(index: number, patch: Partial<DayDraft>) {
-    setDraft((current) => ({
-      ...current,
-      days: current.days.map((day, dayIndex) => {
-        if (dayIndex !== index) return day;
-        const next = { ...day, ...patch };
-        if (next.type === 'strength' && !next.exercises.length) next.exercises = [blankExercise([])];
-        return next;
-      }),
-    }));
-  }
+  useEffect(() => {
+    if (!leaveGuard) return;
+    leaveGuard.current = () => !dirty || window.confirm('You have unsaved changes to the programme. Leave without saving?');
+    return () => { leaveGuard.current = () => true; };
+  }, [dirty, leaveGuard]);
 
-  function updateExercise(dayIndex: number, exerciseIndex: number, patch: Partial<ExerciseDraft>) {
-    setDraft((current) => ({
-      ...current,
-      days: current.days.map((day, index) => index === dayIndex ? {
-        ...day, exercises: day.exercises.map((exercise, position) => position === exerciseIndex ? { ...exercise, ...patch } : exercise),
-      } : day),
-    }));
-  }
+  useEffect(() => {
+    if (!dirty) return;
+    const warn = (event: BeforeUnloadEvent) => {
+      event.preventDefault();
+      event.returnValue = '';
+    };
+    window.addEventListener('beforeunload', warn);
+    return () => window.removeEventListener('beforeunload', warn);
+  }, [dirty]);
 
   async function save() {
     if (busy || !parsed.ok || !changes.length) return;
@@ -200,80 +115,59 @@ export function ProgrammeEditor({ today, data, programme, onSave }: {
   }
 
   const newer = programme.revision !== seen && dirty;
-  const openIndex = draft.days.findIndex((day) => day.id === openDay);
-  const open = openIndex >= 0 ? draft.days[openIndex] : undefined;
-  return <section className="screen screen-nav screen-programme">
-    <HeadingSentence className="heading-small" lead="Programme." follow="Shared with Brenna." />
-    <ChipGroup label="Programme section" value={view} onChange={(value) => setView(value as View)} options={[
-      { value: 'edit', label: 'Edit' },
-      { value: 'history', label: 'History' },
-      { value: 'messages', label: `Notes${programme.state.messages.length ? ` ${programme.state.messages.length}` : ''}` },
-    ]} />
+  const applies = draft.effectiveFrom ? displayDate(draft.effectiveFrom) : 'the chosen date';
+  const saveLabel = `Save · applies ${applies}`;
+  const validation = parsed.ok ? '' : parsed.error;
+  function discard() {
+    setDraft(draftFrom(currentContent(data, programme, today), today));
+    setError('');
+  }
+  const heading = view === 'week'
+    ? ['Jessie\'s week.', 'Everything she logged, in one place.']
+    : ['Programme.', 'Shared with Brenna.'];
+  return <section className="screen screen-nav screen-programme admin-screen">
+    <header className="admin-header">
+      <div>
+        <h1 className="admin-heading">{heading[0]} <span>{heading[1]}</span></h1>
+        <nav className="admin-tabs" aria-label="Programme views">
+          {([
+            ['week', 'Week'],
+            ['edit', 'Edit plan'],
+            ['history', 'History'],
+            ['messages', `Notes${programme.state.messages.length ? ` ${programme.state.messages.length}` : ''}`],
+          ] as const).map(([id, label]) => <button key={id} type="button" aria-current={view === id ? 'page' : undefined} onClick={() => setView(id)}>{label}</button>)}
+        </nav>
+      </div>
+      <div className="admin-tools">
+        {view === 'week' && <WeekControls start={weekOf} today={today} onStart={setWeekOf} onAdjust={() => setView('edit')} />}
+        <div className="admin-save">
+          {dirty ? <>
+            <span className="admin-save-copy">
+              <span className="admin-dirty"><i aria-hidden="true" />{changes.length ? `${changes.length} unsaved ${changes.length === 1 ? 'change' : 'changes'}` : 'Unsaved changes'}</span>
+              <span className="admin-save-note">Logged workouts keep the plan they were saved with</span>
+            </span>
+            <button type="button" className="admin-discard" onClick={discard} disabled={busy}>Discard</button>
+            <button type="button" className="admin-commit" onClick={() => void save()} disabled={busy || !parsed.ok || !changes.length}>{busy ? 'Saving…' : saveLabel}</button>
+          </> : <span className="admin-clean">All changes saved</span>}
+        </div>
+      </div>
+    </header>
     {newer && <p className="notice">A newer programme was saved on another device. Your unsaved edits are still here.</p>}
+    {view === 'week' && <WeekReport today={today} data={data} programme={programme} start={weekOf} />}
     {view === 'history' && <History programme={programme} onEdit={(content) => { setDraft(draftFrom(content, today)); setView('edit'); }} />}
     {view === 'messages' && <Messages programme={programme} author={author} message={message} busy={busy}
       onAuthor={(value) => { setAuthor(value); try { localStorage.setItem('rise-programme-author', value); } catch { /* The choice still applies to this note. */ } }}
       onMessage={setMessage} onSend={() => void send()} />}
-    {view === 'edit' && <>
-      <div className="programme-grid">
-        <label className="input-group"><span>Applies from</span>
-          <input type="date" value={draft.effectiveFrom} onChange={(event) => setDraft({ ...draft, effectiveFrom: event.target.value })} />
-        </label>
-        <label className="programme-check"><input type="checkbox" checked={draft.deload} onChange={(event) => setDraft({ ...draft, deload: event.target.checked })} /><span>Deload week</span></label>
-        <Field label="Steps from" inputMode="numeric" value={draft.stepsMin} onChange={(stepsMin) => setDraft({ ...draft, stepsMin })} />
-        <Field label="Steps to" inputMode="numeric" value={draft.stepsMax} onChange={(stepsMax) => setDraft({ ...draft, stepsMax })} />
-        <Field wide multiline label="Week note" value={draft.weekNote} onChange={(weekNote) => setDraft({ ...draft, weekNote })} />
+    {view === 'edit' && <PlanEditor draft={draft} onChange={setDraft} changes={changes} error={validation || error} busy={busy}
+      canSave={parsed.ok && changes.length > 0} saveLabel={saveLabel} onSave={() => void save()} onDiscard={discard} onOverlay={onOverlay} />}
+    {view !== 'edit' && (validation || error) && <p className="notice" role="alert">{validation || error}</p>}
+    {dirty && !sheetOpen && <div className="admin-dock">
+      <p className="fine">Logged workouts keep the plan they were saved with</p>
+      <div className="admin-dock-actions">
+        <button type="button" className="admin-discard" onClick={discard} disabled={busy}>Discard</button>
+        <button type="button" className="admin-commit" onClick={() => void save()} disabled={busy || !parsed.ok || !changes.length}>{busy ? 'Saving…' : saveLabel}</button>
       </div>
-      <div className="programme-split">
-        <div className="programme-days">
-          {draft.days.map((day, index) => <article key={day.id} className="programme-day">
-            <button type="button" className="programme-day-toggle" style={{ order: index * 2 }} aria-expanded={openDay === day.id} onClick={() => setOpenDay(openDay === day.id ? undefined : day.id)}>
-              <span>Day {index + 1}</span>
-              <strong>{day.title || 'Untitled'}</strong>
-              <small>{day.type === 'strength' ? `${day.exercises.length} exercises` : day.type === 'cardio' ? 'Cardio' : 'Rest'}</small>
-            </button>
-          </article>)}
-        </div>
-        <div className="programme-stage" style={{ order: openIndex >= 0 ? openIndex * 2 + 1 : draft.days.length * 2 }}>
-          {open ? <div className="programme-day-body">
-            <Field wide label="Day name" value={open.title} onChange={(title) => updateDay(openIndex, { title })} />
-            <ChipGroup label={`Day ${openIndex + 1} type`} value={open.type} options={[...dayKinds]} onChange={(type) => updateDay(openIndex, { type: type as DayDraft['type'] })} />
-            <span className="programme-actions">
-              <Pill onClick={() => setDraft((current) => ({ ...current, days: moveItem(current.days, openIndex, -1) }))}>Move up</Pill>
-              <Pill onClick={() => setDraft((current) => ({ ...current, days: moveItem(current.days, openIndex, 1) }))}>Move down</Pill>
-              <Pill onClick={() => setDraft((current) => ({ ...current, days: duplicateDay(current.days, openIndex) }))} disabled={openIndex === draft.days.length - 1}>Copy to next day</Pill>
-            </span>
-            {open.type === 'strength' && <>
-              {open.exercises.map((exercise, exerciseIndex) => <ExerciseEditor key={exercise.id} exercise={exercise}
-                onChange={(patch) => updateExercise(openIndex, exerciseIndex, patch)}
-                onMove={(direction) => updateDay(openIndex, { exercises: moveItem(open.exercises, exerciseIndex, direction) })}
-                onRemove={() => updateDay(openIndex, { exercises: open.exercises.filter((_, position) => position !== exerciseIndex) })}
-                onReplace={() => updateDay(openIndex, { exercises: open.exercises.map((item, position) => position === exerciseIndex ? { ...blankExercise(open.exercises.map((entry) => entry.id)), sets: item.sets, warmupSets: item.warmupSets, rest: item.rest, mode: item.mode, repMin: item.repMin, repMax: item.repMax, per: item.per } : item) })} />)}
-              <Pill onClick={() => updateDay(openIndex, { exercises: [...open.exercises, blankExercise(open.exercises.map((exercise) => exercise.id))] })}>Add exercise</Pill>
-            </>}
-            {open.type === 'cardio' && <>
-              <Field wide label="Cardio note" value={open.note} onChange={(note) => updateDay(openIndex, { note })} />
-              <Field wide multiline label="Options, one per line" value={open.options} onChange={(options) => updateDay(openIndex, { options })} />
-            </>}
-            {open.type === 'active-rest' && <>
-              <Field wide label="Rest note" value={open.note} onChange={(note) => updateDay(openIndex, { note })} />
-              <Field wide multiline label="Guidance, one per line" value={open.guidance} onChange={(guidance) => updateDay(openIndex, { guidance })} />
-            </>}
-          </div> : <p className="programme-day-empty">Choose a day to edit.</p>}
-        </div>
-      </div>
-      {!parsed.ok && <p className="notice" role="alert">{parsed.error}</p>}
-      {!!changes.length && <details className="programme-review" open={changes.length <= 8}>
-        <summary>Review {changes.length} {changes.length === 1 ? 'change' : 'changes'}</summary>
-        <ul>{changes.map((change) => <li key={change}>{change}</li>)}</ul>
-      </details>}
-      {error && <p className="notice" role="alert">{error}</p>}
-      <div className="screen-actions">
-        <PrimaryButton onClick={() => void save()} disabled={busy || !parsed.ok || !changes.length}>{busy ? 'Saving…' : 'Save programme'}</PrimaryButton>
-        <p className="fine">Applies from {draft.effectiveFrom ? displayDate(draft.effectiveFrom) : 'the date above'}. Logged workouts keep the plan and the numbers they were saved with.</p>
-      </div>
-    </>}
-    {view !== 'edit' && error && <p className="notice" role="alert">{error}</p>}
+    </div>}
   </section>;
 }
 

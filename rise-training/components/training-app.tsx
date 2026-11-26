@@ -1,7 +1,7 @@
 'use client';
 
 import { useRouter } from 'next/navigation';
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { CheckIns } from './check-ins';
 import { Habits } from './habits';
 import { ProgrammeEditor } from './programme';
@@ -48,6 +48,9 @@ export function TrainingApp({ initial, programme: initialProgramme, today: initi
   const [today, setToday] = useState(initialToday);
   const [workout, setWorkout] = useState<WorkoutSelection>();
   const [focused, setFocused] = useState(false);
+  const leaveGuard = useRef<() => boolean>(() => true);
+  const tabRef = useRef(tab);
+  tabRef.current = tab;
 
   const data = snapshot.data;
   const fixedWorkoutDate = workout?.date;
@@ -59,6 +62,10 @@ export function TrainingApp({ initial, programme: initialProgramme, today: initi
   useEffect(() => {
     function sync() {
       const current = tabFromHash();
+      if (tabRef.current === 'programme' && current !== 'programme' && !leaveGuard.current()) {
+        window.history.pushState(window.history.state, '', '#programme');
+        return;
+      }
       setTab(current);
       setWorkout(current === 'train' ? window.history.state?.riseWorkout : undefined);
       setFocused(false);
@@ -126,6 +133,7 @@ export function TrainingApp({ initial, programme: initialProgramme, today: initi
   };
 
   function navigate(to: Tab, selected?: WorkoutSelection) {
+    if (tab === 'programme' && to !== 'programme' && !leaveGuard.current()) return;
     setTab(to);
     setWorkout(selected);
     setFocused(false);
@@ -165,7 +173,7 @@ export function TrainingApp({ initial, programme: initialProgramme, today: initi
       {tab === 'habits' && <Habits key={today} date={today} log={data.habits[today]} goals={habitGoals(programme.state, today)} mutate={mutate} />}
       {tab === 'check-ins' && <CheckIns key={today} date={today} data={data} mutate={mutate} goalsFor={(day) => habitGoals(programme.state, day)}
         destination={data.docs?.checkIns ?? configuredDoc} setFocused={setFocused} />}
-      {tab === 'programme' && <ProgrammeEditor today={today} data={data} programme={programme} onSave={saveProgramme} />}
+      {tab === 'programme' && <ProgrammeEditor today={today} data={data} programme={programme} onSave={saveProgramme} leaveGuard={leaveGuard} />}
     </main>
     {!focused && <FloatingNav tab={tab} onNavigate={(to) => {
       if (to === tab) { window.scrollTo(0, 0); return; }
