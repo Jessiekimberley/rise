@@ -188,6 +188,11 @@ button.pill, a.pill { min-height: var(--tap-min); }
 }
 .workout-stop[aria-pressed="true"] { background: var(--color-surface-muted); color: var(--color-ink); }
 .workout-stop:disabled { opacity: .45; }
+.workout-discard {
+  justify-self: start; min-height: 36px; padding: 0 4px; border: 0; background: transparent;
+  color: var(--color-error); font-size: 13px; font-weight: 650;
+}
+.workout-discard:disabled { opacity: .45; }
 .workout-session-bar ~ .screen, .workout-session-bar + .workout-exercise .screen-logger {
   padding-top: 14px; min-height: calc(100svh - 63px - var(--safe-top));
 }

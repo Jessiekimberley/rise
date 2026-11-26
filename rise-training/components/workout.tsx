@@ -227,21 +227,23 @@ export function Workout({ date, today, planId, onPlan, onOpen, onLogToday, data,
   const hasSets = slots.some(({ log }) => Object.keys(log.sets).length);
   const slot = selection && slots.find((item) => item.original.id === selection.slotId);
   const ready = Boolean(session && !session.finishedAt && !next);
+  const stopped = Boolean(session?.pausedAt);
   const sessionBar = session && <div className="workout-session-bar">
     <div className="workout-session-heading">
-      <div><strong>{selection ? dayTitle(plan) : session.finishedAt ? 'Workout finished' : ready ? 'Ready to submit' : 'Workout in progress'}</strong>
+      <div><strong>{selection ? dayTitle(plan) : session.finishedAt ? 'Workout finished' : stopped ? 'Workout stopped' : ready ? 'Ready to submit' : 'Workout in progress'}</strong>
         <span>Day {plan.day} · <time dateTime={date}>{displayDate(date, dateWords)}</time></span></div>
       <div className="workout-session-time">
         <WorkoutClock key={session.startedAt} session={session} />
-        {!session.finishedAt && <button type="button" className="workout-stop" aria-pressed={Boolean(session.pausedAt)}
-          aria-label={session.pausedAt ? 'Resume clock' : 'Stop clock'} disabled={busy}
-          onClick={() => void setClock(Boolean(session.pausedAt))}>
-          {session.pausedAt
+        {!session.finishedAt && <button type="button" className="workout-stop" aria-pressed={stopped}
+          aria-label={stopped ? 'Resume clock' : 'Stop clock'} disabled={busy}
+          onClick={() => void setClock(!stopped)}>
+          {stopped
             ? <Play size={14} strokeWidth={2} aria-hidden="true" />
             : <Square size={11} fill="currentColor" strokeWidth={0} aria-hidden="true" />}
         </button>}
       </div>
     </div>
+    {selection && stopped && confirming !== 'discard' && <button type="button" className="workout-discard" onClick={() => ask('discard')} disabled={busy}>Discard workout</button>}
     {selection && error && <p className="notice" role="alert">{error}</p>}
   </div>;
 
@@ -458,7 +460,7 @@ export function Workout({ date, today, planId, onPlan, onOpen, onLogToday, data,
           else if (next) void open({ slotId: next.original.id, index: next.index });
           else void finish();
         }}>{busy ? 'Saving…' : preview ? 'Log this workout today' : actionText}</PrimaryButton>
-        {ready && <PrimaryButton className="danger-quiet" onClick={() => ask('discard')} disabled={busy}>Discard record</PrimaryButton>}
+        {(ready || stopped) && <PrimaryButton className="danger-quiet" onClick={() => ask('discard')} disabled={busy}>Discard workout</PrimaryButton>}
       </>}
     </div>
     {!confirming && chooseWorkout}
@@ -468,10 +470,10 @@ export function Workout({ date, today, planId, onPlan, onOpen, onLogToday, data,
       <PrimaryButton onClick={() => void begin()}>Do again</PrimaryButton>
       <PrimaryButton className="button-muted" onClick={() => setConfirming(undefined)}>Pick another</PrimaryButton>
     </BottomSheet>}
-    {!confirming && session && !session.finishedAt && next && <details className="disclosure supplementary">
+    {!confirming && session && !session.finishedAt && next && (hasSets || !stopped) && <details className="disclosure supplementary">
       <summary>Workout options</summary>
       {hasSets && <Pill onClick={() => void finish()} disabled={busy}>Submit record early</Pill>}
-      <Pill onClick={() => ask('discard')} disabled={busy}>Discard record</Pill>
+      {!stopped && <Pill onClick={() => ask('discard')} disabled={busy}>Discard workout</Pill>}
     </details>}
   </section></>;
 }
