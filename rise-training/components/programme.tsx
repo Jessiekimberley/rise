@@ -140,7 +140,7 @@ export function ProgrammeEditor({ today, data, programme, onSave, leaveGuard }: 
       </div>
       <div className="admin-tools">
         {view === 'week' && <WeekControls start={weekOf} today={today} onStart={setWeekOf} onAdjust={() => setView('edit')} />}
-        <div className="admin-save">
+        {(view === 'edit' || dirty) && <div className="admin-save">
           {dirty ? <>
             <span className="admin-save-copy">
               <span className="admin-dirty"><i aria-hidden="true" />{changes.length ? `${changes.length} unsaved ${changes.length === 1 ? 'change' : 'changes'}` : 'Unsaved changes'}</span>
@@ -149,7 +149,7 @@ export function ProgrammeEditor({ today, data, programme, onSave, leaveGuard }: 
             <button type="button" className="admin-discard" onClick={discard} disabled={busy}>Discard</button>
             <button type="button" className="admin-commit" onClick={() => void save()} disabled={busy || !parsed.ok || !changes.length}>{busy ? 'Saving…' : saveLabel}</button>
           </> : <span className="admin-clean">All changes saved</span>}
-        </div>
+        </div>}
       </div>
     </header>
     {newer && <p className="notice">A newer programme was saved on another device. Your unsaved edits are still here.</p>}

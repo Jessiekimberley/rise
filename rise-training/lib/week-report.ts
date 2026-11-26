@@ -1,7 +1,8 @@
 import type { CheckIn, HabitLog, Session, SetLog, SlotLog, TrainingData } from './model';
 import { orderedSlots } from './model';
 import { findExercise, findPlan } from './programme';
-import { habitGoals, type ProgrammeSnapshot } from './prescription';
+import { contentBefore, habitGoals, type ProgrammeSnapshot } from './prescription';
+import { availableWeek } from './weeks';
 import {
   addDays, datesThrough, displayDate, formatCount, goalSpan, rirDisplay, scheduledProgrammeDay, weekStart,
   type HabitGoals,
@@ -270,7 +271,12 @@ export function buildWeekReport(data: TrainingData, programme: ProgrammeSnapshot
     const number = session ? workoutNumber(session) : undefined;
     const plan = session ? session.plan ?? findPlan(session.planId) : undefined;
     const name = plan?.name ?? (number ? `Workout ${number}` : '');
-    const title = session && number ? `Workout ${number} · ${name}` : 'Nothing logged yet';
+    let title = session && number ? `Workout ${number} · ${name}` : 'Nothing logged yet';
+    if (!session && date === today) {
+      const scheduled = contentBefore(programme.state, date, availableWeek(data, date)?.plans)
+        .days.find((item) => item.day === scheduledProgrammeDay(date, data));
+      if (scheduled) title = `Workout ${scheduled.day} · ${scheduled.title}`;
+    }
     const usual = number ? dates.find((day) => scheduledProgrammeDay(day, data) === number) : undefined;
     const swapped = session && usual && usual !== date;
     const swapText = swapped && usual

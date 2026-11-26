@@ -867,6 +867,13 @@ button.pill, a.pill { min-height: var(--tap-min); }
 .admin-section-body .admin-quiet { background: #fff; }
 .admin-move-row, .admin-sheet-actions, .admin-dock-actions { display: flex; gap: 8px; }
 .admin-move-row .admin-discard { flex: 1; background: var(--color-surface-muted); }
+.admin-sheet .admin-exercise-head { display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: start; }
+.admin-sheet .admin-exercise-head > label { grid-column: 1; grid-row: 1; }
+.admin-sheet .admin-exercise-head > .admin-menu { grid-column: 2; grid-row: 1; }
+.admin-sheet .admin-exercise-head > .segmented { grid-column: 1 / -1; grid-row: 2; width: auto; }
+.admin-sheet .admin-exercise-head > .segmented-fit { grid-auto-columns: 1fr; }
+.admin-title-input:focus { outline: none; }
+.admin-title-input:focus-visible { outline: 2px solid var(--color-ink); outline-offset: 4px; }
 .admin-sheet.modal-sheet { height: min(780px, calc(100dvh - 96px)); }
 .admin-sheet .sheet-content { display: flex; flex-direction: column; height: 100%; gap: 12px; padding-bottom: 16px; }
 .admin-sheet-scroll { display: flex; flex: 1; flex-direction: column; gap: 6px; min-height: 0; overflow: auto; }
@@ -930,6 +937,9 @@ button.pill, a.pill { min-height: var(--tap-min); }
   .admin-heading { font-size: 36px; }
   .admin-tabs button { height: 38px; }
   .admin-header { flex-direction: row; align-items: flex-end; justify-content: space-between; }
+  .admin-header > div:first-child { flex: 1; min-width: 0; }
+  .admin-tools { flex: none; }
+  .admin-heading { white-space: nowrap; }
   .admin-settings { grid-template-columns: 220px 200px minmax(240px, 320px) minmax(0, 1fr); }
   .week-stats { grid-template-columns: repeat(5, minmax(0, 1fr)); }
   .week-stat:last-child { grid-column: auto; }
